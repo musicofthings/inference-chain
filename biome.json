@@ -1,0 +1,7 @@
+{
+	"formatter": { "enabled": true },
+	"linter": { "enabled": true, "rules": { "recommended": true } },
+	"files": {
+		"ignore": ["dist/**", "node_modules/**", ".tmp-inbox-test/**"]
+	}
+}
