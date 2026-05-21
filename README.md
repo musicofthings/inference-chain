@@ -12,19 +12,19 @@ Not RAG, not transcript archive, not vector DB, not blockchain.
 
 ```mermaid
 flowchart TD
-  A[Claude Code Session n] --> B[/ic-checkpoint or /ic-stop]
-  B --> C[Write artifact to .inference-chain/inbox]
-  C --> D[ic evolve]
-  D --> E{Artifact type}
-  E -->|latest-update.yml| F[Evolve via InteractionUpdate]
-  E -->|latest-brief.yml| G[Evolve via SessionBrief]
-  F --> H[Archive to updates/<id>.yml]
-  G --> I[Archive to briefs/<id>.yml]
-  H --> J[Update current.yml ledger state]
+  A["Claude Code Session n"] --> B["Run command: ic-checkpoint or ic-stop"]
+  B --> C["Write artifact to .inference-chain/inbox"]
+  C --> D["Run ic evolve"]
+  D --> E{"Artifact type"}
+  E -->|"latest-update.yml"| F["Evolve via InteractionUpdate"]
+  E -->|"latest-brief.yml"| G["Evolve via SessionBrief"]
+  F --> H["Archive to updates id.yml"]
+  G --> I["Archive to briefs id.yml"]
+  H --> J["Update current.yml ledger state"]
   I --> J
-  J --> K[Compute and print score delta]
-  K --> L[ic resume]
-  L --> M[Generate resumes/resume_latest.md for Session n+1]
+  J --> K["Compute and print score delta"]
+  K --> L["Run ic resume"]
+  L --> M["Generate resumes resume_latest.md for Session n plus 1"]
 ```
 
 ## Quickstart
