@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import YAML from 'yaml';
 import { nanoid } from 'nanoid';
 import { ChainLedgerSchema, InteractionUpdateSchema, SessionBriefSchema, type ChainLedger } from './core/schemas.js';
+import { evolveLedger, scoreLedger } from './core/evolve.js';
 
 const IC = '.inference-chain';
 const p = (...s: string[]) => join(process.cwd(), ...s);
@@ -46,23 +47,20 @@ program.command('evolve').option('--advance').action((opts) => {
   const ledger = loadCurrent();
   const updatePath = p(IC,'inbox','latest-update.yml');
   const briefPath = p(IC,'inbox','latest-brief.yml');
+  const beforeScore = scoreLedger(ledger);
+  let evolved: ChainLedger;
+
   if (existsSync(briefPath)) {
     const brief = SessionBriefSchema.parse(YAML.parse(readFileSync(briefPath,'utf8')));
-    ledger.iteration += 1;
-    ledger.updated_at = now();
-    ledger.current_operating_model = brief.working_theory;
-    ledger.current_frontier.next_best_action = brief.next_best_action;
-    ledger.do_not_repeat = [...new Set([...ledger.do_not_repeat, ...brief.do_not_repeat])];
-    ledger.continuity_summary = brief.human_handoff_summary;
+    evolved = evolveLedger(ledger, { kind: 'session', value: brief }, true);
   } else if (existsSync(updatePath)) {
     const upd = InteractionUpdateSchema.parse(YAML.parse(readFileSync(updatePath,'utf8')));
-    if (opts.advance) ledger.iteration += 1;
-    ledger.updated_at = now();
-    ledger.current_frontier.next_best_action = upd.next_action_delta.length ? upd.next_action_delta : ledger.current_frontier.next_best_action;
-    ledger.do_not_repeat = [...new Set([...ledger.do_not_repeat, ...upd.do_not_repeat_delta])];
+    evolved = evolveLedger(ledger, { kind: 'interaction', value: upd }, Boolean(opts.advance));
   } else throw new Error('No inbox artifact found.');
-  saveCurrent(ChainLedgerSchema.parse(ledger));
-  console.log('Ledger evolved.');
+
+  saveCurrent(ChainLedgerSchema.parse(evolved));
+  const afterScore = scoreLedger(evolved);
+  console.log(`Ledger evolved. score: ${beforeScore} -> ${afterScore}`);
 });
 program.command('resume').option('--silent').action(({silent})=>{
   const l=loadCurrent();

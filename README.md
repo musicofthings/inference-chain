@@ -22,3 +22,22 @@ ic install-claude
 
 ## License
 Apache-2.0
+
+
+## Local n+1 algorithm test (on this machine)
+1. Install dependencies:
+   `pnpm install`
+2. Run tests (includes a mathematical n+1 progression test):
+   `pnpm test`
+3. Run only progression test:
+   `pnpm test -- evolveMath.test.ts`
+4. Manual CLI flow:
+   - `pnpm build`
+   - `node dist/cli.js init --project-name "Demo"`
+   - Create `.inference-chain/inbox/latest-update.yml` (InteractionUpdate)
+   - `node dist/cli.js evolve`
+   - Create `.inference-chain/inbox/latest-brief.yml` (SessionBrief)
+   - `node dist/cli.js evolve`
+   - `node dist/cli.js resume`
+
+Expected signal of progress: `ic evolve` prints a score transition like `score: 3 -> 6`; this score is computed from accumulated stable learnings, hypotheses/frontier, and do-not-repeat memory, so non-decreasing values indicate n+1 context accumulation.
