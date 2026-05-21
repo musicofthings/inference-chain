@@ -1,0 +1,19 @@
+{
+  "name": "inference-chain",
+  "version": "0.1.0",
+  "description": "Forward-only n+1 inference ledger for Claude Code. Captures session handoffs, evolves the operating context after meaningful interactions, generates sharper resume briefs.",
+  "author": {
+    "name": "Inference Chain contributors"
+  },
+  "homepage": "https://github.com/musicofthings/inference-chain",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agentic-context-engineering",
+    "memory",
+    "continuity",
+    "session-handoff",
+    "n+1"
+  ],
+  "commands": "./commands",
+  "hooks": "./hooks/hooks.json"
+}

@@ -1,10 +1,22 @@
 {
   "name": "inference-chain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inference Chain — A Forward Inference Ledger for Claude Code",
   "type": "module",
   "license": "Apache-2.0",
-  "bin": {"ic": "./dist/cli.js"},
+  "bin": {
+    "ic": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "docs/PRD-TRD.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
@@ -13,7 +25,8 @@
     "format": "biome format --write ."
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.10.0",
     "commander": "^14.0.0",
     "nanoid": "^5.1.6",
     "yaml": "^2.8.1",

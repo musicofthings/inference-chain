@@ -1,0 +1,33 @@
+kind: session_brief
+schema_version: "1.0.0"
+id: brf_08_rate_limit
+project_id: task-api
+iteration: 2
+created_at: "2026-05-23T11:00:00Z"
+session_intent:
+  primary_goal: "Add rate limiting"
+  what_agent_was_doing: "Designing rate-limit middleware"
+working_theory:
+  summary: "Token-bucket per API key is the right model; sliding-window per IP was the initial draft but rejected"
+  confidence: high
+actions_attempted:
+  - "drafted sliding-window per IP rate limit"
+  - "switched to token-bucket per API key"
+outcomes_observed:
+  - "token-bucket handles burst traffic without per-IP false positives"
+worked:
+  - "token-bucket per API key for rate limiting"
+did_not_work:
+  - "sliding-window per IP — false positives behind NAT"
+partially_worked: []
+issues_identified:
+  - "shared-IP false positives under sliding-window"
+fixes_attempted:
+  - "switch to token-bucket per API key"
+unresolved_state: ""
+next_best_action:
+  - "write integration tests for token-bucket limits"
+do_not_repeat:
+  - "sliding-window per IP for shared-IP clients"
+user_constraints: []
+human_handoff_summary: "Rate limiting landed with token-bucket per API key. Sliding-window per IP was attempted and rejected. Next: integration tests."
