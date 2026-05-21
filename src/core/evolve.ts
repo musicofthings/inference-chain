@@ -8,8 +8,8 @@ import type {
 } from './schemas.js';
 
 export type Source =
-  | { kind: 'interaction'; value: InteractionUpdate }
-  | { kind: 'session'; value: SessionBrief };
+	| { kind: "interaction"; value: InteractionUpdate }
+	| { kind: "session"; value: SessionBrief };
 
 export type EvolutionResult = {
   evolutionRecord: MemoryEvolutionRecord;
