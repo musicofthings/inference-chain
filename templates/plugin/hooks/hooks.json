@@ -1,0 +1,32 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "test -f .inference-chain/resumes/resume_latest.md && cat .inference-chain/resumes/resume_latest.md || true"
+        }
+      ]
+    }
+  ],
+  "PreCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo '[inference-chain] Consider /ic-checkpoint before compaction to preserve operating context.'"
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo '[inference-chain] Consider /ic-stop to write a Session Brief, then: ic ingest .inference-chain/inbox/latest-brief.yml && ic evolve && ic resume'"
+        }
+      ]
+    }
+  ]
+}

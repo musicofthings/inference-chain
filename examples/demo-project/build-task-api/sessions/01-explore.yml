@@ -1,0 +1,19 @@
+kind: interaction_update
+schema_version: "1.0.0"
+id: upd_01_explore
+project_id: task-api
+iteration: 0
+created_at: "2026-05-21T09:00:00Z"
+trigger: manual_checkpoint
+what_changed: "Surveyed HTTP server libs for the task API"
+new_information:
+  - "node native http is too low-level for routing needs"
+  - "express and fastify are both viable for our requirements"
+  - "koa was considered but rules it out due to middleware complexity"
+next_action_delta:
+  - "prototype express endpoint"
+  - "prototype fastify endpoint"
+new_blockers: []
+new_risks:
+  - "JSON streaming throughput is unknown for both options"
+human_note: "Initial library survey"

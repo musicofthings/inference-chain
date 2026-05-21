@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inference Chain — A Forward Inference Ledger for Claude Code</title>
+<meta name="description" content="Local-first agentic context engineering for Claude Code. A forward-only n+1 inference ledger that evolves the operating context across sessions.">
+<meta property="og:title" content="Inference Chain">
+<meta property="og:description" content="Every Claude Code session continues sharper than the last.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛓</text></svg>">
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-elev: #161b22;
+    --fg: #e6edf3;
+    --fg-dim: #8b949e;
+    --accent: #f0c674;
+    --accent-2: #7ee787;
+    --warn: #ff7b72;
+    --border: #30363d;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --bg-elev: #f6f8fa; --fg: #1f2328; --fg-dim: #59636e;
+      --accent: #9a6700; --accent-2: #1a7f37; --warn: #cf222e; --border: #d1d9e0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 12px;
+    color: var(--fg-dim); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px; margin-bottom: 18px;
+  }
+  h1 { font-size: 38px; line-height: 1.15; margin: 0 0 12px; font-weight: 700; letter-spacing: -0.02em; }
+  h1 .ac { color: var(--accent); }
+  .tagline { font-size: 19px; color: var(--fg-dim); margin: 0; max-width: 60ch; }
+  h2 { font-size: 22px; margin: 48px 0 16px; letter-spacing: -0.01em; }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .15s; }
+  a:hover { border-bottom-color: var(--accent); }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--bg-elev); padding: 2px 6px; border-radius: 4px; }
+  pre {
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; overflow-x: auto; margin: 0 0 16px;
+  }
+  pre code { background: transparent; padding: 0; }
+  .cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--fg); color: var(--bg);
+    padding: 10px 18px; border-radius: 8px;
+    font-family: var(--mono); font-size: 14px; font-weight: 600;
+    margin-right: 8px; margin-top: 12px;
+    border: 1px solid var(--fg);
+  }
+  .cta:hover { border-bottom-color: var(--fg); opacity: 0.9; }
+  .cta.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 16px 0 8px; }
+  .card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+  .card h4 { margin: 0 0 6px; font-size: 14px; font-family: var(--mono); color: var(--accent); }
+  .card p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 16px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--fg-dim); font-weight: 600; font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  td code { font-size: 12.5px; }
+  .ok { color: var(--accent-2); }
+  .no { color: var(--warn); }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 13px; color: var(--fg-dim); }
+  .arrow { color: var(--fg-dim); }
+  .small { font-size: 13px; color: var(--fg-dim); }
+  .loop {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.8;
+    color: var(--fg-dim); margin: 0 0 16px;
+  }
+  .loop .ac { color: var(--accent); }
+  .loop .ok2 { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="chip">v0.2.0 · Apache-2.0 · local-first</div>
+  <h1>Inference <span class="ac">Chain</span></h1>
+  <p class="tagline">A forward-only <code>n+1</code> inference ledger for Claude Code. Every session continues sharper than the last.</p>
+  <p style="margin-top: 24px;">
+    <a class="cta" href="https://github.com/musicofthings/inference-chain">View on GitHub →</a>
+    <a class="cta ghost" href="https://github.com/musicofthings/inference-chain/blob/main/docs/PRD-TRD.md">Read the PRD/TRD</a>
+  </p>
+</header>
+
+<section>
+  <h2>What it is</h2>
+  <p>
+    A local-first <strong>agentic context engineering</strong> layer for Claude Code (and, via MCP, Claude Desktop). After each meaningful interaction or session close, the ledger evolves: confirmed beliefs accumulate, rejected ones stay rejected, the frontier sharpens, and the next session starts with a refined operating context — not a transcript.
+  </p>
+  <div class="loop">
+    Session <span class="ac">n</span><br>
+    <span class="arrow">→</span> Session Brief <span class="ac">n</span><br>
+    <span class="arrow">→</span> Memory Evolution Record <span class="ac">n</span><br>
+    <span class="arrow">→</span> Chain Ledger <span class="ok2">n+1</span><br>
+    <span class="arrow">→</span> Resume Brief <span class="ok2">n+1</span><br>
+    <span class="arrow">→</span> Session <span class="ok2">n+1</span> starts sharper
+  </div>
+</section>
+
+<section>
+  <h2>What it is not</h2>
+  <div class="grid">
+    <div class="card"><h4>not RAG</h4><p>No embeddings, no vector DB, no retrieval layer.</p></div>
+    <div class="card"><h4>not a transcript</h4><p>No chain-of-thought, no tool logs, no terminal capture.</p></div>
+    <div class="card"><h4>not blockchain</h4><p>Local SHA-256 hash chain for integrity. That's it.</p></div>
+    <div class="card"><h4>not SaaS</h4><p>100% local. No telemetry. No API calls.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Quickstart</h2>
+  <pre><code>pnpm install
+pnpm build
+pnpm link --global
+
+cd /path/to/your/project
+ic init --project-name "My Project"
+ic install-claude</code></pre>
+
+  <h3>In Claude Code</h3>
+  <pre><code>/ic-checkpoint   # mid-session
+/ic-stop         # end of session</code></pre>
+
+  <h3>Back in your terminal</h3>
+  <pre><code>ic ingest .inference-chain/inbox/latest-brief.yml
+ic evolve
+ic resume</code></pre>
+</section>
+
+<section>
+  <h2>Validate the n+1 hypothesis</h2>
+  <p>
+    Bundled simulation harness replays a scripted multi-session narrative and reports whether the ledger actually carried useful signal forward.
+  </p>
+  <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
+  --reset --project-name "task-api"</code></pre>
+  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — and a binary verdict. On the demo: <span class="ok">n+1 POSITIVE</span> (score 1 → 18 over 3 iterations, 0 rejected beliefs reappeared, 75% of do-not-repeat items captured early).</p>
+</section>
+
+<section>
+  <h2>Claude Desktop (v1.1)</h2>
+  <p>Add to <code>claude_desktop_config.json</code>:</p>
+  <pre><code>{
+  "mcpServers": {
+    "inference-chain": {
+      "command": "ic",
+      "args": ["mcp", "--cwd", "/abs/path/to/your/project"]
+    }
+  }
+}</code></pre>
+  <p class="small">Exposes six MCP tools: <code>chain_status</code>, <code>chain_resume_brief</code>, <code>chain_ingest_update</code>, <code>chain_ingest_brief</code>, <code>chain_evolve</code>, <code>chain_verify</code>. As long as each session starts in the same folder, the ledger is the key.</p>
+</section>
+
+<section>
+  <h2>Commands</h2>
+  <table>
+    <thead><tr><th>command</th><th>what it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>ic init</code></td><td>Initialize <code>.inference-chain/</code>, SQLite, JSONL, templates</td></tr>
+      <tr><td><code>ic install-claude</code></td><td>Install slash commands + plugin scaffold; merge hooks</td></tr>
+      <tr><td><code>ic ingest &lt;file&gt;</code></td><td>Validate + store an artifact (routes by <code>kind</code>)</td></tr>
+      <tr><td><code>ic evolve</code></td><td>Apply latest brief/update; emit MemoryEvolutionRecord</td></tr>
+      <tr><td><code>ic resume</code></td><td>Generate <code>resumes/resume_latest.md</code></td></tr>
+      <tr><td><code>ic status</code></td><td>Show iteration, event count, ledger sizes, score</td></tr>
+      <tr><td><code>ic verify</code></td><td>Replay hash chain; cross-check SQLite</td></tr>
+      <tr><td><code>ic mcp</code></td><td>Start MCP stdio server for Claude Desktop</td></tr>
+      <tr><td><code>ic simulate &lt;dir&gt;</code></td><td>Replay session artifacts + n+1 metrics report</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Conceptual lineage</h2>
+  <ul>
+    <li><a href="https://arxiv.org/abs/2303.11366">Reflexion</a> — verbal reinforcement; agents learn from outcomes without weight updates.</li>
+    <li><a href="https://arxiv.org/abs/2510.04618">Agentic Context Engineering</a> — context as a self-improving artifact.</li>
+    <li><a href="https://docs.claude.com/en/docs/claude-code">Claude Code</a> — hooks + slash commands as the integration surface.</li>
+  </ul>
+</section>
+
+<footer>
+  Inference Chain · Apache-2.0 · <a href="https://github.com/musicofthings/inference-chain">github.com/musicofthings/inference-chain</a><br>
+  <span class="small">Inference Chain does not help Claude remember everything. It helps the next Claude session know what matters now.</span>
+</footer>
+
+</div>
+</body>
+</html>

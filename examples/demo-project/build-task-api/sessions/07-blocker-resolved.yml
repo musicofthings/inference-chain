@@ -1,0 +1,30 @@
+kind: session_brief
+schema_version: "1.0.0"
+id: brf_07_blocker_resolved
+project_id: task-api
+iteration: 1
+created_at: "2026-05-22T18:00:00Z"
+session_intent:
+  primary_goal: "Resolve SQLite concurrency blocker"
+  what_agent_was_doing: "Diagnosing and fixing concurrent write failures"
+working_theory:
+  summary: "WAL mode resolves concurrent writes; fastify+SQLite+WAL is the stable architecture"
+  confidence: high
+actions_attempted:
+  - "enabled WAL mode in db bootstrap"
+  - "re-ran concurrent write benchmark"
+outcomes_observed:
+  - "10 concurrent writers complete in 84ms (was: locking failures)"
+worked:
+  - "enable WAL mode on db open"
+did_not_work: []
+partially_worked: []
+issues_identified: []
+fixes_attempted:
+  - "set journal_mode=WAL during db open"
+unresolved_state: "Rate limiting not yet designed"
+next_best_action:
+  - "design rate limiting layer"
+do_not_repeat: []
+user_constraints: []
+human_handoff_summary: "Concurrency blocker resolved with WAL mode. Next session should tackle rate limiting; fastify stack confirmed stable."

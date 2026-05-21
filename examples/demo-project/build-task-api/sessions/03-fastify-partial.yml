@@ -1,0 +1,31 @@
+kind: session_brief
+schema_version: "1.0.0"
+id: brf_03_fastify_partial
+project_id: task-api
+iteration: 0
+created_at: "2026-05-21T12:00:00Z"
+session_intent:
+  primary_goal: "Choose HTTP server and ship task CRUD endpoints"
+  what_agent_was_doing: "Comparing fastify against the rejected express baseline"
+working_theory:
+  summary: "Fastify is the likely choice; JSON streaming meets target, auth path untested"
+  confidence: medium
+actions_attempted:
+  - "implemented GET /tasks with fastify"
+  - "ran k6 load test against 10k payload"
+outcomes_observed:
+  - "fastify hit throughput target on streaming JSON"
+  - "auth middleware integration not yet tested"
+worked: []
+did_not_work: []
+partially_worked:
+  - "fastify is the right choice for this API"
+issues_identified: []
+fixes_attempted: []
+unresolved_state: "Auth route under fastify is unverified"
+next_best_action:
+  - "verify fastify works under auth middleware"
+do_not_repeat: []
+user_constraints:
+  - "must use a permissive license for the HTTP framework"
+human_handoff_summary: "Express ruled out. Fastify meets streaming target but auth path needs verification before committing."
