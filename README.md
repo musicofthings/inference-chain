@@ -81,3 +81,22 @@ Apache-2.0
 - New `ic health` command reports context/system health checks.
 - New `ic doctor` command prints troubleshooting context and guided next steps.
 - New `ic theme --oh-my-posh` writes an integration snippet for prompt/status integration.
+
+
+## Claude Code plugin packaging
+This repository now includes a Claude Code plugin package in `plugin/` with:
+- `plugin/.claude-plugin/plugin.json`
+- `plugin/commands/*`
+- `plugin/hooks/hooks.json`
+
+Use locally:
+```bash
+claude --plugin-dir ./plugin
+```
+
+Then commands are namespaced as:
+- `/inference-chain:ic-checkpoint`
+- `/inference-chain:ic-stop`
+- `/inference-chain:ic-evolve`
+- `/inference-chain:ic-resume`
+- `/inference-chain:goal`
