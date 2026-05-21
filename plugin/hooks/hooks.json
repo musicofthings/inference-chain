@@ -1,0 +1,29 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"hooks": [{ "type": "command", "command": "ic health" }]
+			}
+		],
+		"PreCompact": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "echo 'Inference Chain: run /inference-chain:ic-checkpoint'"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "echo 'Inference Chain: run /inference-chain:ic-stop'"
+					}
+				]
+			}
+		]
+	}
+}

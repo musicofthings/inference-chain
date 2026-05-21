@@ -1,0 +1,6 @@
+{
+	"$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+	"name": "inference-chain",
+	"version": "0.1.0",
+	"description": "Inference Chain plugin for Claude Code: checkpoint, evolve, resume, health, doctor, goal workflows"
+}
