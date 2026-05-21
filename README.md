@@ -37,7 +37,7 @@ ic install-claude
 ```
 
 ## Commands
-`ic init`, `ic install-claude`, `ic ingest`, `ic evolve`, `ic resume`, `ic status`, `ic verify`
+`ic init`, `ic install-claude`, `ic ingest`, `ic evolve`, `ic resume`, `ic status`, `ic verify`, `ic health`, `ic doctor`, `ic theme`, `ic goal`
 
 ## Local n+1 algorithm test (on this machine)
 1. Install dependencies:
@@ -72,3 +72,12 @@ Expected signal of progress: `ic evolve` prints a score transition like `score: 
 
 ## License
 Apache-2.0
+
+
+## Plugin and automation enhancements
+- `ic init` now auto-detects project name from current working directory when `--project-name` is omitted.
+- Claude detection is automatic: if `.claude` already exists, `ic install-claude` skips by default (use `--force` to overwrite).
+- New `ic goal` command stores a goal and optional `max_iterations`; `ic evolve` stops automatic loops when the cap is reached.
+- New `ic health` command reports context/system health checks.
+- New `ic doctor` command prints troubleshooting context and guided next steps.
+- New `ic theme --oh-my-posh` writes an integration snippet for prompt/status integration.
