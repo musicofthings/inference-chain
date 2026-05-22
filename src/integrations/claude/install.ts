@@ -57,8 +57,13 @@ function mergeSettings(settingsPath: string): void {
         string,
         unknown
       >;
-    } catch {
-      // Leave a broken settings file alone — refuse to overwrite human edits.
+    } catch (err) {
+      // Leave a broken settings file alone — refuse to overwrite human
+      // edits — but make the skip visible so users can fix the JSON.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[inference-chain] WARN: ${settingsPath} is not valid JSON (${msg}). Skipping hook merge. Fix the file and re-run "ic install-claude".`,
+      );
       return;
     }
   }

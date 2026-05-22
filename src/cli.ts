@@ -4,38 +4,33 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
 import { Command } from 'commander';
 import { nanoid } from 'nanoid';
 import YAML from 'yaml';
-import { type LedgerEvent, type LedgerEventType, makeEvent } from './core/events.js';
-import { evolveLedger, scoreLedger } from './core/evolve.js';
+import { scoreLedger } from './core/evolve.js';
 import { renderResumeBrief } from './core/resume.js';
 import {
   ChainLedgerSchema,
   InteractionUpdateSchema,
   MemoryEvolutionRecordSchema,
-  SCHEMA_VERSION,
   SessionBriefSchema,
   type ChainLedger,
 } from './core/schemas.js';
 import { installClaude } from './integrations/claude/install.js';
-import {
-  appendEvent,
-  ensureLedgerFile,
-  lastEvent,
-  verifyChain,
-} from './storage/jsonl.js';
+import { ensureLedgerFile, verifyChain } from './storage/jsonl.js';
 import { TEMPLATE } from './storage/packageAssets.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
+import {
+  appendChainEvent,
+  archiveInboxFile,
+  runEvolution,
+} from './storage/persist.js';
 import {
   type DB,
   eventCount,
   insertBrief,
-  insertEvent,
   insertEvolution,
   insertUpdate,
   openDb,
@@ -66,29 +61,6 @@ function openProjectDb(): DB {
   return openDb(PATHS.db());
 }
 
-function appendChainEvent(
-  db: DB,
-  args: {
-    projectId: string;
-    iteration: number;
-    type: LedgerEventType;
-    payload: unknown;
-  },
-): LedgerEvent {
-  const prev = lastEvent(PATHS.ledgerJsonl());
-  const event = makeEvent({
-    projectId: args.projectId,
-    iteration: args.iteration,
-    type: args.type,
-    payload: args.payload,
-    schemaVersion: SCHEMA_VERSION,
-    parent: prev ? { id: prev.id, hash: prev.hash } : null,
-  });
-  appendEvent(PATHS.ledgerJsonl(), event);
-  insertEvent(db, event);
-  return event;
-}
-
 function copyPromptTemplates(): void {
   const targets: [string, string][] = [
     [TEMPLATE.promptCaptureUpdate(), ic('prompts', 'capture-interaction-update.md')],
@@ -99,12 +71,6 @@ function copyPromptTemplates(): void {
   for (const [src, dst] of targets) {
     if (existsSync(src)) copyFileSync(src, dst);
   }
-}
-
-function archiveInbox(inboxPath: string, archiveDir: string, id: string): void {
-  const dest = join(archiveDir, `${id}.yml`);
-  mkdirSync(archiveDir, { recursive: true });
-  renameSync(inboxPath, dest);
 }
 
 // ───────────────────────── CLI ─────────────────────────
@@ -242,8 +208,17 @@ program
         console.log(`Ingested MemoryEvolutionRecord ${parsed.id}`);
       } else if (kind === 'chain_ledger') {
         const parsed = ChainLedgerSchema.parse(raw);
-        const dest = ic('evolutions', `ledger-${parsed.iteration}-${nanoid(6)}.yml`);
+        const snapshotId = `ledger-${parsed.iteration}-${nanoid(6)}`;
+        const dest = ic('evolutions', `${snapshotId}.yml`);
         copyFileSync(p(file), dest);
+        appendChainEvent(db, {
+          projectId: parsed.project_id,
+          iteration: parsed.iteration,
+          // Snapshot ingest still belongs in the chain: re-use ledger_evolved
+          // so verify counts stay coherent with the artifact set on disk.
+          type: 'ledger_evolved',
+          payload: { snapshot: snapshotId, iteration: parsed.iteration, source: 'snapshot' },
+        });
         console.log(`Ingested ChainLedger snapshot for iteration ${parsed.iteration}`);
       } else {
         throw new Error(`Unknown kind: ${kind}`);
@@ -260,80 +235,51 @@ program
     const ledger = loadCurrent();
     const briefPath = PATHS.inboxBrief();
     const updatePath = PATHS.inboxUpdate();
-    const beforeScore = scoreLedger(ledger);
 
-    let result: ReturnType<typeof evolveLedger>;
-    let sourceKind: 'session' | 'interaction';
+    let source: Parameters<typeof runEvolution>[0]['source'];
     let sourceId: string;
+    let advance: boolean;
     let archive: () => void;
 
     if (existsSync(briefPath)) {
       const brief = SessionBriefSchema.parse(YAML.parse(readFileSync(briefPath, 'utf8')));
-      result = evolveLedger(ledger, { kind: 'session', value: brief }, true);
-      sourceKind = 'session';
+      source = { kind: 'session', value: brief };
       sourceId = brief.id;
-      archive = () => archiveInbox(briefPath, ic('briefs'), brief.id);
+      advance = true;
+      archive = () => archiveInboxFile(briefPath, ic('briefs'), brief.id);
     } else if (existsSync(updatePath)) {
       const upd = InteractionUpdateSchema.parse(YAML.parse(readFileSync(updatePath, 'utf8')));
-      result = evolveLedger(ledger, { kind: 'interaction', value: upd }, Boolean(opts.advance));
-      sourceKind = 'interaction';
+      source = { kind: 'interaction', value: upd };
       sourceId = upd.id;
-      archive = () => archiveInbox(updatePath, ic('updates'), upd.id);
+      advance = Boolean(opts.advance);
+      archive = () => archiveInboxFile(updatePath, ic('updates'), upd.id);
     } else {
       throw new Error(
         'No inbox artifact found. Expected .inference-chain/inbox/latest-brief.yml or latest-update.yml.',
       );
     }
 
-    const validated = ChainLedgerSchema.parse(result.updatedLedger);
-    const validatedRecord = MemoryEvolutionRecordSchema.parse(result.evolutionRecord);
-    const ledgerYaml = saveCurrent(validated);
-    const recordYaml = YAML.stringify(validatedRecord);
-    writeFileSync(ic('evolutions', `${validatedRecord.id}.yml`), recordYaml);
-
     const db = openProjectDb();
     try {
-      insertEvolution(db, {
-        id: validatedRecord.id,
-        projectId: validatedRecord.project_id,
-        fromIteration: validatedRecord.from_iteration,
-        toIteration: validatedRecord.to_iteration,
-        yaml: recordYaml,
-        createdAt: validatedRecord.created_at,
+      const outcome = runEvolution({
+        db,
+        ledger,
+        source,
+        advance,
+        sourceId,
+        archiveInbox: archive,
       });
-      upsertChainState(db, validated, ledgerYaml);
-      appendChainEvent(db, {
-        projectId: validated.project_id,
-        iteration: validatedRecord.to_iteration,
-        type: 'memory_evolution_created',
-        payload: { id: validatedRecord.id, source: validatedRecord.source, from: sourceId },
-      });
-      appendChainEvent(db, {
-        projectId: validated.project_id,
-        iteration: validated.iteration,
-        type: 'ledger_evolved',
-        payload: {
-          from: validatedRecord.from_iteration,
-          to: validatedRecord.to_iteration,
-          source: sourceKind,
-        },
-      });
+      console.log(
+        `Ledger evolved (iteration ${outcome.record.from_iteration} -> ${outcome.record.to_iteration}). score: ${outcome.scoreBefore} -> ${outcome.scoreAfter}`,
+      );
     } finally {
       db.close();
     }
-
-    archive();
-
-    const afterScore = scoreLedger(validated);
-    console.log(
-      `Ledger evolved (iteration ${validatedRecord.from_iteration} -> ${validatedRecord.to_iteration}). score: ${beforeScore} -> ${afterScore}`,
-    );
   });
 
 program
   .command('resume')
   .option('--silent', 'Do not print to stdout')
-  .option('--target <agent>', 'Resume target agent (default: claude-code)', 'claude-code')
   .action(({ silent }: { silent?: boolean }) => {
     const ledger = loadCurrent();
     const text = renderResumeBrief(ledger);

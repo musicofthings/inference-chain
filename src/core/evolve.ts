@@ -16,10 +16,15 @@ export type EvolutionResult = {
   updatedLedger: ChainLedger;
 };
 
-const STABLE_PROMOTION_THRESHOLD = (() => {
+const DEFAULT_STABLE_PROMOTION_THRESHOLD = (() => {
   const env = Number(process.env.IC_STABLE_THRESHOLD);
   return Number.isFinite(env) && env >= 1 ? Math.floor(env) : 2;
 })();
+
+export type EvolveOptions = {
+  /** Number of supporting-evidence items before a hypothesis is promoted to stable. */
+  stablePromotionThreshold?: number;
+};
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -57,28 +62,31 @@ function dropConfidence(
 
 export function scoreLedger(ledger: ChainLedger): number {
   // Reward resolved knowledge (stable learnings, decisions, rejected
-  // hypotheses) more than open frontier items. Discount open_questions so
-  // a ledger that accumulates uncertainty without resolving it does not
-  // appear to improve.
+  // hypotheses) more than in-flight beliefs. Frontier size is intentionally
+  // *not* rewarded — a ledger that piles up "next best actions" without
+  // resolving them should not score higher. The simulate harness measures
+  // frontier_convergence separately and expects it to shrink, so scoring
+  // had to agree with that direction.
   const resolved =
     ledger.stable_learnings.length * 3 +
     ledger.stable_decisions.length * 3 +
     ledger.rejected_hypotheses.length * 2 +
     ledger.do_not_repeat.length * 1;
-  const open =
-    ledger.active_hypotheses.length * 1 +
-    ledger.current_frontier.next_best_action.length * 1;
+  const inFlight = ledger.active_hypotheses.length * 1;
   const drag =
     ledger.open_questions.length * 1 +
     ledger.current_frontier.blockers.length * 2;
-  return resolved + open - drag;
+  return resolved + inFlight - drag;
 }
 
 export function evolveLedger(
   previous: ChainLedger,
   source: Source,
   advance: boolean,
+  opts: EvolveOptions = {},
 ): EvolutionResult {
+  const stablePromotionThreshold =
+    opts.stablePromotionThreshold ?? DEFAULT_STABLE_PROMOTION_THRESHOLD;
   const next: ChainLedger = structuredClone(previous);
   const fromIteration = previous.iteration;
   next.updated_at = new Date().toISOString();
@@ -109,7 +117,7 @@ export function evolveLedger(
       const h = next.active_hypotheses[idx];
       h.supporting_evidence = uniqueAppend(h.supporting_evidence, [evidence]);
       h.confidence = bumpConfidence(h.confidence);
-      if (h.supporting_evidence.length >= STABLE_PROMOTION_THRESHOLD) {
+      if (h.supporting_evidence.length >= stablePromotionThreshold) {
         promoted.push({
           learning: h.hypothesis,
           reason: `Confirmed ${h.supporting_evidence.length}× across iterations`,
@@ -246,7 +254,6 @@ export function evolveLedger(
         next.recurring_failure_patterns.push({
           pattern: issue,
           evidence: [`First observed at iteration ${next.iteration}`],
-          mitigation: '',
         });
       }
     }

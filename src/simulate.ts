@@ -10,28 +10,24 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import YAML from 'yaml';
-import { evolveLedger, scoreLedger } from './core/evolve.js';
-import { type LedgerEvent, makeEvent } from './core/events.js';
+import { scoreLedger } from './core/evolve.js';
 import { renderResumeBrief } from './core/resume.js';
 import {
   ChainLedgerSchema,
   InteractionUpdateSchema,
-  SCHEMA_VERSION,
   SessionBriefSchema,
   type ChainLedger,
 } from './core/schemas.js';
-import {
-  appendEvent,
-  ensureLedgerFile,
-  lastEvent,
-  verifyChain,
-} from './storage/jsonl.js';
+import { verifyChain } from './storage/jsonl.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
+import {
+  appendChainEvent,
+  archiveInboxFile,
+  runEvolution,
+} from './storage/persist.js';
 import {
   eventCount,
   insertBrief,
-  insertEvent,
-  insertEvolution,
   insertUpdate,
   openDb,
   upsertChainState,
@@ -94,35 +90,11 @@ function saveCurrent(ledger: ChainLedger): string {
   return yaml;
 }
 
-function appendChainEvent(args: {
-  projectId: string;
-  iteration: number;
-  type: LedgerEvent['type'];
-  payload: unknown;
-}): LedgerEvent {
-  ensureLedgerFile(PATHS.ledgerJsonl());
-  const prev = lastEvent(PATHS.ledgerJsonl());
-  const event = makeEvent({
-    ...args,
-    schemaVersion: SCHEMA_VERSION,
-    parent: prev ? { id: prev.id, hash: prev.hash } : null,
-  });
-  appendEvent(PATHS.ledgerJsonl(), event);
-  const db = openDb(PATHS.db());
-  try {
-    insertEvent(db, event);
-  } finally {
-    db.close();
-  }
-  return event;
-}
-
 function initFresh(projectName: string): void {
   if (existsSync(p(IC_DIR))) {
     rmSync(p(IC_DIR), { recursive: true, force: true });
   }
   ensureDirs();
-  ensureLedgerFile(PATHS.ledgerJsonl());
   const initial: ChainLedger = ChainLedgerSchema.parse({
     project_id: projectName,
     iteration: 0,
@@ -147,15 +119,15 @@ function initFresh(projectName: string): void {
   const db = openDb(PATHS.db());
   try {
     upsertChainState(db, initial, yaml);
+    appendChainEvent(db, {
+      projectId: projectName,
+      iteration: 0,
+      type: 'project_initialized',
+      payload: { project_name: projectName, via: 'simulate' },
+    });
   } finally {
     db.close();
   }
-  appendChainEvent({
-    projectId: projectName,
-    iteration: 0,
-    type: 'project_initialized',
-    payload: { project_name: projectName, via: 'simulate' },
-  });
 }
 
 function detectKind(raw: { kind?: string }): StepKind {
@@ -217,139 +189,134 @@ export async function runSimulation(opts: {
   let totalActiveAtPromoteTime = 0;
   const perStep: StepRecord[] = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const fullPath = join(dirAbs, file);
-    const raw = YAML.parse(readFileSync(fullPath, 'utf8')) as { kind?: string };
-    const kind = detectKind(raw);
+  // One sqlite handle for the entire simulation; per-step open/close was
+  // wasteful and prevented atomic evolve via runEvolution.
+  const db = openDb(PATHS.db());
+  let finalLedger: ChainLedger;
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fullPath = join(dirAbs, file);
+      const raw = YAML.parse(readFileSync(fullPath, 'utf8')) as { kind?: string };
+      const kind = detectKind(raw);
 
-    const before = loadCurrent();
-    const beforeScore = scoreLedger(before);
-    let result: ReturnType<typeof evolveLedger>;
-    if (kind === 'session_brief') {
-      const brief = SessionBriefSchema.parse(raw);
-      result = evolveLedger(before, { kind: 'session', value: brief }, true);
-      const inboxCopy = ic('inbox', 'latest-brief.yml');
-      copyFileSync(fullPath, inboxCopy);
-      const db = openDb(PATHS.db());
-      try {
+      const before = loadCurrent();
+      const beforeScore = scoreLedger(before);
+      const stamp = new Date().toISOString();
+
+      let source: Parameters<typeof runEvolution>[0]['source'];
+      let archive: () => void;
+      const briefInbox = ic('inbox', 'latest-brief.yml');
+      const updateInbox = ic('inbox', 'latest-update.yml');
+      let sourceId: string;
+      let advanceFlag: boolean;
+
+      if (kind === 'session_brief') {
+        const brief = SessionBriefSchema.parse(raw);
+        source = { kind: 'session', value: brief };
+        sourceId = brief.id;
+        advanceFlag = true;
+        copyFileSync(fullPath, briefInbox);
         insertBrief(db, {
           id: brief.id,
           projectId: brief.project_id,
           iteration: brief.iteration,
           yaml: YAML.stringify(brief),
-          createdAt: new Date().toISOString(),
+          createdAt: stamp,
         });
-      } finally {
-        db.close();
-      }
-      appendChainEvent({
-        projectId: brief.project_id,
-        iteration: brief.iteration,
-        type: 'session_brief_captured',
-        payload: { id: brief.id, via: 'simulate' },
-      });
-    } else {
-      const upd = InteractionUpdateSchema.parse(raw);
-      result = evolveLedger(before, { kind: 'interaction', value: upd }, false);
-      copyFileSync(fullPath, ic('inbox', 'latest-update.yml'));
-      const db = openDb(PATHS.db());
-      try {
+        appendChainEvent(db, {
+          projectId: brief.project_id,
+          iteration: brief.iteration,
+          type: 'session_brief_captured',
+          payload: { id: brief.id, via: 'simulate' },
+        });
+        archive = () => archiveInboxFile(briefInbox, ic('briefs'), brief.id);
+      } else {
+        const upd = InteractionUpdateSchema.parse(raw);
+        source = { kind: 'interaction', value: upd };
+        sourceId = upd.id;
+        advanceFlag = false;
+        copyFileSync(fullPath, updateInbox);
         insertUpdate(db, {
           id: upd.id,
           projectId: upd.project_id,
           iteration: upd.iteration,
           yaml: YAML.stringify(upd),
-          createdAt: new Date().toISOString(),
+          createdAt: stamp,
         });
-      } finally {
-        db.close();
+        appendChainEvent(db, {
+          projectId: upd.project_id,
+          iteration: upd.iteration,
+          type: 'interaction_update_captured',
+          payload: { id: upd.id, trigger: upd.trigger, via: 'simulate' },
+        });
+        archive = () => archiveInboxFile(updateInbox, ic('updates'), upd.id);
       }
-      appendChainEvent({
-        projectId: upd.project_id,
-        iteration: upd.iteration,
-        type: 'interaction_update_captured',
-        payload: { id: upd.id, trigger: upd.trigger, via: 'simulate' },
-      });
-    }
 
-    const after = ChainLedgerSchema.parse(result.updatedLedger);
-    const afterYaml = saveCurrent(after);
-    const recordYaml = YAML.stringify(result.evolutionRecord);
-    writeFileSync(ic('evolutions', `${result.evolutionRecord.id}.yml`), recordYaml);
-    const db = openDb(PATHS.db());
-    try {
-      insertEvolution(db, {
-        id: result.evolutionRecord.id,
-        projectId: result.evolutionRecord.project_id,
-        fromIteration: result.evolutionRecord.from_iteration,
-        toIteration: result.evolutionRecord.to_iteration,
-        yaml: recordYaml,
-        createdAt: result.evolutionRecord.created_at,
-      });
-      upsertChainState(db, after, afterYaml);
-    } finally {
-      db.close();
-    }
-    appendChainEvent({
-      projectId: after.project_id,
-      iteration: result.evolutionRecord.to_iteration,
-      type: 'memory_evolution_created',
-      payload: { id: result.evolutionRecord.id, source: result.evolutionRecord.source, via: 'simulate' },
-    });
-    appendChainEvent({
-      projectId: after.project_id,
-      iteration: after.iteration,
-      type: 'ledger_evolved',
-      payload: {
-        from: result.evolutionRecord.from_iteration,
-        to: result.evolutionRecord.to_iteration,
-        source: kind === 'session_brief' ? 'session' : 'interaction',
+      const outcome = runEvolution({
+        db,
+        ledger: before,
+        source,
+        advance: advanceFlag,
+        sourceId,
+        archiveInbox: archive,
         via: 'simulate',
-      },
+      });
+      const after = outcome.validated;
+
+      const promotedThisStep = outcome.record.promoted_to_stable.length;
+      totalPromoted += promotedThisStep;
+      totalActiveAtPromoteTime += before.active_hypotheses.length;
+
+      const step: StepRecord = {
+        index: i + 1,
+        file,
+        kind,
+        iteration_before: before.iteration,
+        iteration_after: after.iteration,
+        score_before: beforeScore,
+        score_after: outcome.scoreAfter,
+        added_stable: diffStrings(before.stable_learnings, after.stable_learnings),
+        added_rejected: diffRejected(before.rejected_hypotheses, after.rejected_hypotheses),
+        added_do_not_repeat: diffStrings(before.do_not_repeat, after.do_not_repeat),
+        frontier_before: before.current_frontier.next_best_action,
+        frontier_after: after.current_frontier.next_best_action,
+        hypotheses_active: after.active_hypotheses.length,
+        hypotheses_promoted_this_step: promotedThisStep,
+      };
+      perStep.push(step);
+
+      if (!opts.jsonOnly) printStep(step);
+    }
+
+    finalLedger = loadCurrent();
+    const briefText = renderResumeBrief(finalLedger);
+    writeFileSync(PATHS.resumeLatest(), briefText);
+    appendChainEvent(db, {
+      projectId: finalLedger.project_id,
+      iteration: finalLedger.iteration,
+      type: 'resume_brief_generated',
+      payload: { iteration: finalLedger.iteration, via: 'simulate' },
     });
-
-    const promotedThisStep = result.evolutionRecord.promoted_to_stable.length;
-    totalPromoted += promotedThisStep;
-    totalActiveAtPromoteTime += before.active_hypotheses.length;
-
-    const step: StepRecord = {
-      index: i + 1,
-      file,
-      kind,
-      iteration_before: before.iteration,
-      iteration_after: after.iteration,
-      score_before: beforeScore,
-      score_after: scoreLedger(after),
-      added_stable: diffStrings(before.stable_learnings, after.stable_learnings),
-      added_rejected: diffRejected(before.rejected_hypotheses, after.rejected_hypotheses),
-      added_do_not_repeat: diffStrings(before.do_not_repeat, after.do_not_repeat),
-      frontier_before: before.current_frontier.next_best_action,
-      frontier_after: after.current_frontier.next_best_action,
-      hypotheses_active: after.active_hypotheses.length,
-      hypotheses_promoted_this_step: promotedThisStep,
-    };
-    perStep.push(step);
-
-    if (!opts.jsonOnly) printStep(step);
+  } finally {
+    db.close();
   }
-
-  // Generate final resume brief and persist
-  const finalLedger = loadCurrent();
-  const briefText = renderResumeBrief(finalLedger);
-  writeFileSync(PATHS.resumeLatest(), briefText);
-  appendChainEvent({
-    projectId: finalLedger.project_id,
-    iteration: finalLedger.iteration,
-    type: 'resume_brief_generated',
-    payload: { iteration: finalLedger.iteration, via: 'simulate' },
-  });
+  const briefText = readFileSync(PATHS.resumeLatest(), 'utf8');
 
   // Metrics
+  //
+  // anti_repeat_coverage: fraction of final do_not_repeat items that landed
+  // in the first half of the run. If iterations never advance (interaction-
+  // only scenarios), iteration-based slicing collapses; fall back to step
+  // index so the metric stays meaningful.
+  const iterationsAdvancedSoFar = finalLedger.iteration - startIteration;
+  const halfwayStep = Math.max(1, Math.ceil(perStep.length / 2));
   const halfwayIteration = Math.floor((finalLedger.iteration + startIteration) / 2);
-  const earlyDoNotRepeat = perStep
-    .filter((s) => s.iteration_after <= halfwayIteration)
-    .flatMap((s) => s.added_do_not_repeat);
+  const earlyDoNotRepeat = (
+    iterationsAdvancedSoFar === 0
+      ? perStep.slice(0, halfwayStep)
+      : perStep.filter((s) => s.iteration_after <= halfwayIteration)
+  ).flatMap((s) => s.added_do_not_repeat);
   const totalDoNotRepeat = finalLedger.do_not_repeat.length;
   const antiRepeatCoverage =
     totalDoNotRepeat === 0
@@ -403,9 +370,9 @@ export async function runSimulation(opts: {
 
   // Verify chain integrity at end
   const verify = verifyChain(PATHS.ledgerJsonl());
-  const db = openDb(PATHS.db());
-  const evtCount = eventCount(db);
-  db.close();
+  const verifyDb = openDb(PATHS.db());
+  const evtCount = eventCount(verifyDb);
+  verifyDb.close();
   if (!verify.ok) notes.push(`chain verification FAILED with ${verify.errors.length} error(s)`);
   if (evtCount !== verify.total)
     notes.push(`sqlite event count ${evtCount} != jsonl ${verify.total}`);

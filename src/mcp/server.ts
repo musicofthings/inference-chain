@@ -3,31 +3,27 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import YAML from 'yaml';
 import { z } from 'zod';
-import { evolveLedger, scoreLedger } from '../core/evolve.js';
-import { type LedgerEvent, makeEvent } from '../core/events.js';
+import { scoreLedger } from '../core/evolve.js';
 import { renderResumeBrief } from '../core/resume.js';
 import {
   ChainLedgerSchema,
   InteractionUpdateSchema,
-  SCHEMA_VERSION,
   SessionBriefSchema,
   type ChainLedger,
 } from '../core/schemas.js';
-import {
-  appendEvent,
-  ensureLedgerFile,
-  lastEvent,
-  verifyChain,
-} from '../storage/jsonl.js';
+import { lastEvent, verifyChain } from '../storage/jsonl.js';
 import { PATHS, ic } from '../storage/paths.js';
 import {
+  appendChainEvent,
+  archiveInboxFile,
+  runEvolution,
+} from '../storage/persist.js';
+import {
+  type DB,
   eventCount,
   insertBrief,
-  insertEvent,
-  insertEvolution,
   insertUpdate,
   openDb,
-  upsertChainState,
 } from '../storage/sqlite.js';
 
 function requireProject(): ChainLedger {
@@ -37,29 +33,6 @@ function requireProject(): ChainLedger {
     );
   }
   return ChainLedgerSchema.parse(YAML.parse(readFileSync(PATHS.currentYml(), 'utf8')));
-}
-
-function appendChainEvent(args: {
-  projectId: string;
-  iteration: number;
-  type: LedgerEvent['type'];
-  payload: unknown;
-}): LedgerEvent {
-  ensureLedgerFile(PATHS.ledgerJsonl());
-  const prev = lastEvent(PATHS.ledgerJsonl());
-  const event = makeEvent({
-    ...args,
-    schemaVersion: SCHEMA_VERSION,
-    parent: prev ? { id: prev.id, hash: prev.hash } : null,
-  });
-  appendEvent(PATHS.ledgerJsonl(), event);
-  const db = openDb(PATHS.db());
-  try {
-    insertEvent(db, event);
-  } finally {
-    db.close();
-  }
-  return event;
 }
 
 function parseArtifact<T>(schema: z.ZodSchema<T>, raw: string): T {
@@ -73,15 +46,21 @@ export async function startMcpServer(): Promise<void> {
     version: '0.2.0',
   });
 
+  // One sqlite handle reused for the lifetime of the stdio server; avoids
+  // open/close per tool call (which would WAL-checkpoint every event).
+  let db: DB | null = null;
+  const getDb = (): DB => {
+    if (!db) db = openDb(PATHS.db());
+    return db;
+  };
+
   server.tool(
     'chain_status',
     'Get the current Inference Chain status for the project rooted at the server cwd. Returns iteration, sizes, score, last event.',
     {},
     async () => {
       const ledger = requireProject();
-      const db = openDb(PATHS.db());
-      const count = eventCount(db);
-      db.close();
+      const count = eventCount(getDb());
       const payload = {
         project: ledger.project_id,
         iteration: ledger.iteration,
@@ -107,7 +86,7 @@ export async function startMcpServer(): Promise<void> {
       const ledger = requireProject();
       const text = renderResumeBrief(ledger);
       writeFileSync(PATHS.resumeLatest(), text);
-      appendChainEvent({
+      appendChainEvent(getDb(), {
         projectId: ledger.project_id,
         iteration: ledger.iteration,
         type: 'resume_brief_generated',
@@ -125,19 +104,15 @@ export async function startMcpServer(): Promise<void> {
       requireProject();
       const parsed = parseArtifact(InteractionUpdateSchema, body);
       writeFileSync(ic('inbox', 'latest-update.yml'), YAML.stringify(parsed));
-      const db = openDb(PATHS.db());
-      try {
-        insertUpdate(db, {
-          id: parsed.id,
-          projectId: parsed.project_id,
-          iteration: parsed.iteration,
-          yaml: YAML.stringify(parsed),
-          createdAt: new Date().toISOString(),
-        });
-      } finally {
-        db.close();
-      }
-      appendChainEvent({
+      const handle = getDb();
+      insertUpdate(handle, {
+        id: parsed.id,
+        projectId: parsed.project_id,
+        iteration: parsed.iteration,
+        yaml: YAML.stringify(parsed),
+        createdAt: new Date().toISOString(),
+      });
+      appendChainEvent(handle, {
         projectId: parsed.project_id,
         iteration: parsed.iteration,
         type: 'interaction_update_captured',
@@ -159,19 +134,15 @@ export async function startMcpServer(): Promise<void> {
       requireProject();
       const parsed = parseArtifact(SessionBriefSchema, body);
       writeFileSync(ic('inbox', 'latest-brief.yml'), YAML.stringify(parsed));
-      const db = openDb(PATHS.db());
-      try {
-        insertBrief(db, {
-          id: parsed.id,
-          projectId: parsed.project_id,
-          iteration: parsed.iteration,
-          yaml: YAML.stringify(parsed),
-          createdAt: new Date().toISOString(),
-        });
-      } finally {
-        db.close();
-      }
-      appendChainEvent({
+      const handle = getDb();
+      insertBrief(handle, {
+        id: parsed.id,
+        projectId: parsed.project_id,
+        iteration: parsed.iteration,
+        yaml: YAML.stringify(parsed),
+        createdAt: new Date().toISOString(),
+      });
+      appendChainEvent(handle, {
         projectId: parsed.project_id,
         iteration: parsed.iteration,
         type: 'session_brief_captured',
@@ -193,87 +164,51 @@ export async function startMcpServer(): Promise<void> {
       const ledger = requireProject();
       const briefPath = PATHS.inboxBrief();
       const updatePath = PATHS.inboxUpdate();
-      const before = scoreLedger(ledger);
 
-      let result: ReturnType<typeof evolveLedger>;
-      let sourceKind: 'session' | 'interaction';
+      let source: Parameters<typeof runEvolution>[0]['source'];
+      let sourceId: string;
+      let advanceFlag: boolean;
+      let archive: () => void;
+
       if (existsSync(briefPath)) {
         const brief = SessionBriefSchema.parse(YAML.parse(readFileSync(briefPath, 'utf8')));
-        result = evolveLedger(ledger, { kind: 'session', value: brief }, true);
-        sourceKind = 'session';
+        source = { kind: 'session', value: brief };
+        sourceId = brief.id;
+        advanceFlag = true;
+        archive = () => archiveInboxFile(briefPath, ic('briefs'), brief.id);
       } else if (existsSync(updatePath)) {
         const upd = InteractionUpdateSchema.parse(YAML.parse(readFileSync(updatePath, 'utf8')));
-        result = evolveLedger(ledger, { kind: 'interaction', value: upd }, Boolean(advance));
-        sourceKind = 'interaction';
+        source = { kind: 'interaction', value: upd };
+        sourceId = upd.id;
+        advanceFlag = Boolean(advance);
+        archive = () => archiveInboxFile(updatePath, ic('updates'), upd.id);
       } else {
         throw new Error(
           'No inbox artifact. Call chain_ingest_update or chain_ingest_brief first.',
         );
       }
 
-      const validated = ChainLedgerSchema.parse(result.updatedLedger);
-      const ledgerYaml = YAML.stringify(validated);
-      writeFileSync(PATHS.currentYml(), ledgerYaml);
-      const recordYaml = YAML.stringify(result.evolutionRecord);
-      writeFileSync(ic('evolutions', `${result.evolutionRecord.id}.yml`), recordYaml);
-
-      const db = openDb(PATHS.db());
-      try {
-        insertEvolution(db, {
-          id: result.evolutionRecord.id,
-          projectId: result.evolutionRecord.project_id,
-          fromIteration: result.evolutionRecord.from_iteration,
-          toIteration: result.evolutionRecord.to_iteration,
-          yaml: recordYaml,
-          createdAt: result.evolutionRecord.created_at,
-        });
-        upsertChainState(db, validated, ledgerYaml);
-      } finally {
-        db.close();
-      }
-      appendChainEvent({
-        projectId: validated.project_id,
-        iteration: result.evolutionRecord.to_iteration,
-        type: 'memory_evolution_created',
-        payload: { id: result.evolutionRecord.id, source: result.evolutionRecord.source, via: 'mcp' },
-      });
-      appendChainEvent({
-        projectId: validated.project_id,
-        iteration: validated.iteration,
-        type: 'ledger_evolved',
-        payload: {
-          from: result.evolutionRecord.from_iteration,
-          to: result.evolutionRecord.to_iteration,
-          source: sourceKind,
-          via: 'mcp',
-        },
+      const outcome = runEvolution({
+        db: getDb(),
+        ledger,
+        source,
+        advance: advanceFlag,
+        sourceId,
+        archiveInbox: archive,
+        via: 'mcp',
       });
 
-      // Best-effort archive of inbox file so re-runs don't double-apply.
-      try {
-        if (sourceKind === 'session' && existsSync(briefPath)) {
-          writeFileSync(ic('briefs', `${result.evolutionRecord.id}-source.yml`), readFileSync(briefPath, 'utf8'));
-          writeFileSync(briefPath, '');
-        } else if (existsSync(updatePath)) {
-          writeFileSync(ic('updates', `${result.evolutionRecord.id}-source.yml`), readFileSync(updatePath, 'utf8'));
-          writeFileSync(updatePath, '');
-        }
-      } catch {
-        // archival is non-critical
-      }
-
-      const after = scoreLedger(validated);
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify(
               {
-                from: result.evolutionRecord.from_iteration,
-                to: result.evolutionRecord.to_iteration,
-                source: sourceKind,
-                score_before: before,
-                score_after: after,
+                from: outcome.record.from_iteration,
+                to: outcome.record.to_iteration,
+                source: source.kind,
+                score_before: outcome.scoreBefore,
+                score_after: outcome.scoreAfter,
               },
               null,
               2,
@@ -293,9 +228,7 @@ export async function startMcpServer(): Promise<void> {
         throw new Error('Missing ledger.jsonl');
       }
       const report = verifyChain(PATHS.ledgerJsonl());
-      const db = openDb(PATHS.db());
-      const sqlite = eventCount(db);
-      db.close();
+      const sqlite = eventCount(getDb());
       return {
         content: [
           {
@@ -309,4 +242,14 @@ export async function startMcpServer(): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Close the shared db handle when the transport detaches so file locks
+  // release cleanly. transport.onclose is part of the SDK contract.
+  const closeDb = () => {
+    if (db) {
+      db.close();
+      db = null;
+    }
+  };
+  transport.onclose = closeDb;
 }

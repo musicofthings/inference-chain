@@ -10,7 +10,7 @@ export const InteractionUpdateSchema = z.object({
   id: z.string(),
   project_id: z.string(),
   iteration: z.number().int().nonnegative(),
-  created_at: z.string(),
+  created_at: z.string().datetime({ offset: true }),
   trigger: z.enum([
     'manual_checkpoint',
     'precompact',
@@ -54,7 +54,7 @@ export const SessionBriefSchema = z.object({
   id: z.string(),
   project_id: z.string(),
   iteration: z.number().int().nonnegative(),
-  created_at: z.string(),
+  created_at: z.string().datetime({ offset: true }),
   session_intent: z.object({
     primary_goal: z.string(),
     what_agent_was_doing: z.string(),
@@ -86,7 +86,7 @@ export const MemoryEvolutionRecordSchema = z.object({
   project_id: z.string(),
   from_iteration: z.number().int().nonnegative(),
   to_iteration: z.number().int().nonnegative(),
-  created_at: z.string(),
+  created_at: z.string().datetime({ offset: true }),
   source: z.enum(['interaction_update', 'session_brief', 'manual_refinement']),
   new_information: z.array(z.string()).default([]),
   confirmed: z
@@ -132,7 +132,7 @@ export const ChainLedgerSchema = z.object({
   schema_version: z.string().default(SCHEMA_VERSION),
   project_id: z.string(),
   iteration: z.number().int().nonnegative(),
-  updated_at: z.string(),
+  updated_at: z.string().datetime({ offset: true }),
   global_objective: z.string(),
   current_operating_model: z.object({
     summary: z.string(),
@@ -165,7 +165,9 @@ export const ChainLedgerSchema = z.object({
       z.object({
         pattern: z.string(),
         evidence: z.array(z.string()).default([]),
-        mitigation: z.string(),
+        // Optional — currently never written by evolve, but kept for
+        // human-authored snapshots and future automation.
+        mitigation: z.string().optional(),
       }),
     )
     .default([]),
