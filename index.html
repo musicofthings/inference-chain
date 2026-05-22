@@ -155,11 +155,21 @@ ic resume</code></pre>
   </p>
   <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
   --reset --project-name "task-api"</code></pre>
-  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — and a binary verdict. On the demo: <span class="ok">n+1 POSITIVE</span> (score 1 → 18 over 3 iterations, 0 rejected beliefs reappeared, 75% of do-not-repeat items captured early).</p>
+  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — and a binary verdict. On the demo: <span class="ok">n+1 POSITIVE</span> (score 0 → 17 over 3 iterations, 0 rejected beliefs reappeared, 75% of do-not-repeat items captured early).</p>
 </section>
 
 <section>
-  <h2>Claude Desktop (v1.1)</h2>
+  <h2>Integrity guarantees</h2>
+  <div class="grid">
+    <div class="card"><h4>hash chain</h4><p>Every event carries <code>parentHash</code> + <code>sha256(canonicalJson(event))</code>. <code>ic verify</code> exits non-zero on any tamper.</p></div>
+    <div class="card"><h4>atomic evolve</h4><p>SQLite transaction wraps the evolution record, chain state, and events; jsonl is batch-appended only after commit.</p></div>
+    <div class="card"><h4>canonical JSON</h4><p>Sorted keys, deterministic bytes. Two processes hashing the same event produce identical hashes.</p></div>
+    <div class="card"><h4>append-only</h4><p>No rewrite path. Only way to drop history is to delete <code>.inference-chain/</code> outright.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Claude Desktop (MCP)</h2>
   <p>Add to <code>claude_desktop_config.json</code>:</p>
   <pre><code>{
   "mcpServers": {

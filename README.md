@@ -125,7 +125,7 @@ frontier without rediscovering rejected hypotheses.
 | `ic mcp [--cwd <dir>]`     | Start an MCP stdio server for Claude Desktop              |
 | `ic simulate <dir>`        | Replay session artifacts and print n+1 sharpness metrics  |
 
-## Claude Desktop (v1.1)
+## Claude Desktop (MCP)
 Add an entry to your `claude_desktop_config.json`:
 
 ```json
@@ -175,22 +175,35 @@ metric means.
   briefs/ updates/ evolutions/ resumes/ prompts/ locks/
 ```
 
-Each ledger event includes `parentEventId` + `parentHash`, and a `hash` of
-`sha256(canonicalJson(event-without-hash))`. `ic verify` recomputes the
-chain and exits non-zero on any tamper.
+## Integrity guarantees
+
+- **Hash chain.** Each ledger event includes `parentEventId` + `parentHash`,
+  and a `hash` of `sha256(canonicalJson(event-without-hash))`. `ic verify`
+  recomputes the chain and exits non-zero on any tamper or broken link.
+- **Atomic evolve.** Every `ic evolve` (and its MCP / simulate equivalents)
+  wraps the evolution record + chain state + new chain events in a single
+  SQLite transaction, and only batch-appends to `ledger.jsonl` after that
+  transaction commits. A failed commit leaves nothing partially applied;
+  the jsonl is never out of sync ahead of SQLite.
+- **Canonical JSON.** Hashes are computed over a sorted-key serialization,
+  so two processes that build the same event produce byte-identical bytes.
+- **Append-only.** `evolve` never rewrites prior events. The only way to
+  remove history is to delete `.inference-chain/` outright.
 
 ## Privacy
 **100% local.** Nothing leaves your machine. No telemetry. No model API
 calls. The entire workflow runs against your filesystem.
 
 ## What we deliberately do not build
-Per PRD §7: blockchain, vector search, cloud sync, dashboards, MCP server,
-transcript archive, code-diff tracking, AST indexing, telemetry. If a
-proposed feature fits one of those, it does not belong here.
+Per PRD §7: blockchain, vector search, cloud sync, dashboards, transcript
+archive, code-diff tracking, AST indexing, telemetry. (An MCP stdio server
+*is* shipped in v0.2 — `ic mcp` — but only as a thin adapter over the same
+local artifacts; there is still no network surface.) If a proposed feature
+fits one of those, it does not belong here.
 
 ## Development
 ```bash
-pnpm test       # 29 tests across canonicalJson, hash, verify, schemas, evolve transitions
+pnpm test       # 31 tests: canonicalJson, hash, verify, schemas, evolve transitions, inbox automation
 pnpm build
 pnpm lint
 pnpm format
