@@ -50,10 +50,12 @@ Per PRD §7 — do not add any of these:
 - blockchain
 - SaaS / cloud sync
 - task manager
-- MCP server (explicitly out of scope for v1)
-- Claude Desktop integration (v1 is Claude Code only)
 
 If a feature request fits one of those, push back and reference PRD §7.
+
+> Note: an MCP server (`ic mcp`) and Claude Desktop support were originally
+> excluded from v1 but were promoted into scope in PRD §20 (v1.1) and have
+> shipped (`src/mcp/server.ts`). They are no longer on the NOT list.
 
 ## Working in this repo
 

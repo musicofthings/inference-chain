@@ -56,8 +56,35 @@ export type DB = Database.Database;
 export function openDb(path: string): DB {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
+  // A long-lived `ic mcp` server and short-lived CLI / hook invocations can
+  // write concurrently. Without a busy timeout, a contended write throws
+  // SQLITE_BUSY immediately; this makes the loser wait for the lock instead.
+  db.pragma('busy_timeout = 5000');
   db.exec(SCHEMA_SQL);
   return db;
+}
+
+export function hasEvent(db: DB, id: string): boolean {
+  return db.prepare('SELECT 1 FROM events WHERE id = ?').get(id) !== undefined;
+}
+
+export function eventHashes(db: DB): Map<string, string> {
+  const rows = db.prepare('SELECT id, hash FROM events').all() as {
+    id: string;
+    hash: string;
+  }[];
+  return new Map(rows.map((r) => [r.id, r.hash]));
+}
+
+export function hasUpdate(db: DB, id: string): boolean {
+  return (
+    db.prepare('SELECT 1 FROM interaction_updates WHERE id = ?').get(id) !==
+    undefined
+  );
+}
+
+export function hasBrief(db: DB, id: string): boolean {
+  return db.prepare('SELECT 1 FROM briefs WHERE id = ?').get(id) !== undefined;
 }
 
 export function insertEvent(db: DB, event: LedgerEvent): void {

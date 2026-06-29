@@ -11,12 +11,13 @@ import {
   SessionBriefSchema,
   type ChainLedger,
 } from '../core/schemas.js';
-import { lastEvent, verifyChain } from '../storage/jsonl.js';
+import { lastEvent } from '../storage/jsonl.js';
 import { PATHS, ic } from '../storage/paths.js';
 import {
   appendChainEvent,
-  archiveInboxFile,
+  resolveInboxSource,
   runEvolution,
+  verifyLedger,
 } from '../storage/persist.js';
 import {
   type DB,
@@ -162,39 +163,17 @@ export async function startMcpServer(): Promise<void> {
     { advance: z.boolean().optional().describe('Force iteration advance for InteractionUpdates') },
     async ({ advance }) => {
       const ledger = requireProject();
-      const briefPath = PATHS.inboxBrief();
-      const updatePath = PATHS.inboxUpdate();
-
-      let source: Parameters<typeof runEvolution>[0]['source'];
-      let sourceId: string;
-      let advanceFlag: boolean;
-      let archive: () => void;
-
-      if (existsSync(briefPath)) {
-        const brief = SessionBriefSchema.parse(YAML.parse(readFileSync(briefPath, 'utf8')));
-        source = { kind: 'session', value: brief };
-        sourceId = brief.id;
-        advanceFlag = true;
-        archive = () => archiveInboxFile(briefPath, ic('briefs'), brief.id);
-      } else if (existsSync(updatePath)) {
-        const upd = InteractionUpdateSchema.parse(YAML.parse(readFileSync(updatePath, 'utf8')));
-        source = { kind: 'interaction', value: upd };
-        sourceId = upd.id;
-        advanceFlag = Boolean(advance);
-        archive = () => archiveInboxFile(updatePath, ic('updates'), upd.id);
-      } else {
-        throw new Error(
-          'No inbox artifact. Call chain_ingest_update or chain_ingest_brief first.',
-        );
-      }
+      const resolved = resolveInboxSource({ advance });
+      const handle = getDb();
+      resolved.ensureCaptured(handle, 'mcp');
 
       const outcome = runEvolution({
-        db: getDb(),
+        db: handle,
         ledger,
-        source,
-        advance: advanceFlag,
-        sourceId,
-        archiveInbox: archive,
+        source: resolved.source,
+        advance: resolved.advance,
+        sourceId: resolved.sourceId,
+        archiveInbox: resolved.archive,
         via: 'mcp',
       });
 
@@ -206,7 +185,7 @@ export async function startMcpServer(): Promise<void> {
               {
                 from: outcome.record.from_iteration,
                 to: outcome.record.to_iteration,
-                source: source.kind,
+                source: resolved.source.kind,
                 score_before: outcome.scoreBefore,
                 score_after: outcome.scoreAfter,
               },
@@ -227,13 +206,23 @@ export async function startMcpServer(): Promise<void> {
       if (!existsSync(PATHS.ledgerJsonl())) {
         throw new Error('Missing ledger.jsonl');
       }
-      const report = verifyChain(PATHS.ledgerJsonl());
-      const sqlite = eventCount(getDb());
+      const v = verifyLedger(getDb());
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ ...report, sqlite_event_count: sqlite, in_sync: sqlite === report.total }, null, 2),
+            text: JSON.stringify(
+              {
+                ok: v.ok,
+                total: v.total,
+                errors: v.errors,
+                sqlite_event_count: v.sqliteEventCount,
+                hash_mismatches: v.hashMismatches,
+                in_sync: v.inSync,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };
