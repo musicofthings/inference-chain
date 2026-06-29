@@ -19,13 +19,14 @@ import {
   type ChainLedger,
 } from './core/schemas.js';
 import { installClaude } from './integrations/claude/install.js';
-import { ensureLedgerFile, verifyChain } from './storage/jsonl.js';
+import { ensureLedgerFile } from './storage/jsonl.js';
 import { TEMPLATE } from './storage/packageAssets.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
 import {
   appendChainEvent,
-  archiveInboxFile,
+  resolveInboxSource,
   runEvolution,
+  verifyLedger,
 } from './storage/persist.js';
 import {
   type DB,
@@ -233,41 +234,18 @@ program
   .option('--advance', 'Increment iteration even when evolving from an InteractionUpdate')
   .action((opts: { advance?: boolean }) => {
     const ledger = loadCurrent();
-    const briefPath = PATHS.inboxBrief();
-    const updatePath = PATHS.inboxUpdate();
-
-    let source: Parameters<typeof runEvolution>[0]['source'];
-    let sourceId: string;
-    let advance: boolean;
-    let archive: () => void;
-
-    if (existsSync(briefPath)) {
-      const brief = SessionBriefSchema.parse(YAML.parse(readFileSync(briefPath, 'utf8')));
-      source = { kind: 'session', value: brief };
-      sourceId = brief.id;
-      advance = true;
-      archive = () => archiveInboxFile(briefPath, ic('briefs'), brief.id);
-    } else if (existsSync(updatePath)) {
-      const upd = InteractionUpdateSchema.parse(YAML.parse(readFileSync(updatePath, 'utf8')));
-      source = { kind: 'interaction', value: upd };
-      sourceId = upd.id;
-      advance = Boolean(opts.advance);
-      archive = () => archiveInboxFile(updatePath, ic('updates'), upd.id);
-    } else {
-      throw new Error(
-        'No inbox artifact found. Expected .inference-chain/inbox/latest-brief.yml or latest-update.yml.',
-      );
-    }
+    const resolved = resolveInboxSource({ advance: opts.advance });
 
     const db = openProjectDb();
     try {
+      resolved.ensureCaptured(db);
       const outcome = runEvolution({
         db,
         ledger,
-        source,
-        advance,
-        sourceId,
-        archiveInbox: archive,
+        source: resolved.source,
+        advance: resolved.advance,
+        sourceId: resolved.sourceId,
+        archiveInbox: resolved.archive,
       });
       console.log(
         `Ledger evolved (iteration ${outcome.record.from_iteration} -> ${outcome.record.to_iteration}). score: ${outcome.scoreBefore} -> ${outcome.scoreAfter}`,
@@ -351,22 +329,38 @@ program.command('verify').action(() => {
     console.error('Missing ledger.jsonl');
     process.exit(1);
   }
-  const report = verifyChain(PATHS.ledgerJsonl());
   const db = openProjectDb();
-  const sqliteCount = eventCount(db);
-  db.close();
-  if (!report.ok) {
-    console.error(`Chain integrity FAILED. ${report.errors.length} error(s):`);
-    for (const e of report.errors) {
+  let v: ReturnType<typeof verifyLedger>;
+  try {
+    v = verifyLedger(db);
+  } finally {
+    db.close();
+  }
+  if (!v.ok) {
+    console.error(`Chain integrity FAILED. ${v.errors.length} error(s):`);
+    for (const e of v.errors) {
       console.error(`  [${e.index}] ${e.eventId}: ${e.reason}`);
     }
     process.exit(1);
   }
-  if (sqliteCount !== report.total) {
-    console.error(`Event count mismatch: jsonl=${report.total} sqlite=${sqliteCount}`);
+  if (!v.inSync) {
+    if (v.sqliteEventCount !== v.total) {
+      console.error(
+        `Event count mismatch: jsonl=${v.total} sqlite=${v.sqliteEventCount}`,
+      );
+    }
+    for (const m of v.hashMismatches) {
+      console.error(`  ${m.eventId}: ${m.reason}`);
+    }
     process.exit(1);
   }
-  console.log(`OK: ${report.total} events, hash chain valid, sqlite in sync.`);
+  console.log(`OK: ${v.total} events, hash chain valid, sqlite in sync.`);
 });
 
-program.parse();
+program.parseAsync(process.argv).catch((err: unknown) => {
+  // Boundary errors (missing project, malformed inbox YAML, schema failures)
+  // should read as a one-line message, not a raw stack trace.
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(`ic: ${msg}`);
+  process.exit(1);
+});

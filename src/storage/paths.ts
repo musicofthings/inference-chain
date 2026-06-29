@@ -24,6 +24,7 @@ export const PATHS = {
   root: () => ic(),
   db: () => ic('chain.db'),
   ledgerJsonl: () => ic('ledger.jsonl'),
+  ledgerLock: () => ic('locks', 'ledger.lock'),
   projectYml: () => ic('project.yml'),
   currentYml: () => ic('current.yml'),
   inboxUpdate: () => ic('inbox', 'latest-update.yml'),
