@@ -265,3 +265,68 @@ describe('scoreLedger', () => {
     expect(scoreLedger(better)).toBeGreaterThan(scoreLedger(l0));
   });
 });
+
+describe('evolveLedger — blocker resolution pruning', () => {
+  it('drops a frontier blocker when the matching belief is rejected', () => {
+    const l0 = baseLedger();
+    l0.current_frontier.blockers = ['GLnexus OOMs at 64GB on 100-sample cohort'];
+
+    const { updatedLedger } = evolveLedger(
+      l0,
+      {
+        kind: 'interaction',
+        value: update({
+          rejected: [
+            {
+              belief: 'GLnexus OOMs at 64GB on 100-sample cohort',
+              reason: 'Resolved by chromosome sharding',
+            },
+          ],
+        }),
+      },
+      false,
+    );
+
+    expect(updatedLedger.current_frontier.blockers).not.toContain(
+      'GLnexus OOMs at 64GB on 100-sample cohort',
+    );
+    expect(
+      updatedLedger.rejected_hypotheses.some(
+        (r) => r.hypothesis === 'GLnexus OOMs at 64GB on 100-sample cohort',
+      ),
+    ).toBe(true);
+  });
+
+  it('prunes a pre-existing blocker resolved via did_not_work in a session brief', () => {
+    const l0 = baseLedger();
+    l0.current_frontier.blockers = ['flaky integration test'];
+
+    const { updatedLedger } = evolveLedger(
+      l0,
+      { kind: 'session', value: brief({ did_not_work: ['flaky integration test'] }) },
+      true,
+    );
+
+    expect(updatedLedger.current_frontier.blockers).not.toContain(
+      'flaky integration test',
+    );
+  });
+
+  it('matches blocker text case-insensitively', () => {
+    const l0 = baseLedger();
+    l0.current_frontier.blockers = ['OOM in Joint Genotyping'];
+
+    const { updatedLedger } = evolveLedger(
+      l0,
+      {
+        kind: 'interaction',
+        value: update({
+          rejected: [{ belief: 'oom in joint genotyping', reason: 'sharded' }],
+        }),
+      },
+      false,
+    );
+
+    expect(updatedLedger.current_frontier.blockers).toHaveLength(0);
+  });
+});

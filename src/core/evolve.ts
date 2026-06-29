@@ -156,6 +156,12 @@ export function evolveLedger(
   const applyRejected = (belief: string, reason: string) => {
     const idx = findHypothesisIndex(next.active_hypotheses, belief);
     if (idx >= 0) next.active_hypotheses.splice(idx, 1);
+    // A rejected belief is a resolved problem, not an open blocker. Drop any
+    // matching frontier blocker so resolved issues stop resurfacing in the
+    // resume brief (and in both sections at once).
+    next.current_frontier.blockers = next.current_frontier.blockers.filter(
+      (b) => norm(b) !== norm(belief),
+    );
     const already = next.rejected_hypotheses.some(
       (r) => norm(r.hypothesis) === norm(belief),
     );
