@@ -88,6 +88,14 @@
   }
   .loop .ac { color: var(--accent); }
   .loop .ok2 { color: var(--accent-2); }
+  .brief {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    overflow-x: auto; margin: 0 0 8px; color: var(--fg); white-space: pre-wrap;
+  }
+  .brief .h { color: var(--accent); }
+  .brief .rej { color: var(--warn); }
+  .brief .ok2 { color: var(--accent-2); }
 </style>
 </head>
 <body>
@@ -106,7 +114,7 @@
 <section>
   <h2>What it is</h2>
   <p>
-    A local-first <strong>agentic context engineering</strong> layer for Claude Code (and, via MCP, Claude Desktop). After each meaningful interaction or session close, the ledger evolves: confirmed beliefs accumulate, rejected ones stay rejected, the frontier sharpens, and the next session starts with a refined operating context — not a transcript.
+    A local-first <strong>agentic context engineering</strong> layer for Claude Code (and, via MCP, Claude Desktop). After each meaningful interaction or session close, the ledger evolves: confirmed beliefs accumulate, rejected ones stay rejected, resolved blockers drop off the frontier, and the next session starts with a refined operating context — not a transcript.
   </p>
   <div class="loop">
     Session <span class="ac">n</span><br>
@@ -126,6 +134,36 @@
     <div class="card"><h4>not blockchain</h4><p>Local SHA-256 hash chain for integrity. That's it.</p></div>
     <div class="card"><h4>not SaaS</h4><p>100% local. No telemetry. No API calls.</p></div>
   </div>
+</section>
+
+<section>
+  <h2>How the ledger stays sharp</h2>
+  <p>Evolution is deterministic, not a model call. Each update reshapes the operating context with a few simple, auditable rules:</p>
+  <div class="grid">
+    <div class="card"><h4>promote</h4><p>A belief confirmed enough times graduates from <code>active_hypotheses</code> into <code>stable_learnings</code>.</p></div>
+    <div class="card"><h4>reject &amp; stay rejected</h4><p>Rejected beliefs move to <code>rejected_hypotheses</code> so the next session won't rediscover them.</p></div>
+    <div class="card"><h4>prune resolved blockers</h4><p>Rejecting a belief drops any matching frontier blocker — a solved problem stops resurfacing in the brief.</p></div>
+    <div class="card"><h4>converge the frontier</h4><p>The next-best-action set is replaced, not appended, so the frontier sharpens instead of bloating.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>The resume brief</h2>
+  <p>This is what the next session actually receives — a current operating model, not a log to re-read.</p>
+  <div class="brief"><span class="h">## Current operating model</span>
+DeepVariant (WGS) + GLnexus with sharded joint genotyping is the right stack.
+Confidence: high
+
+<span class="h">## Stable learnings</span>
+- Sharding GLnexus by chromosome eliminates the OOM at 100 samples
+
+<span class="h">## Rejected hypotheses</span>
+- <span class="rej">GLnexus OOMs at 64GB on 100-sample cohort</span> — rejected@1
+
+<span class="h">## Current frontier</span>
+<span class="ok2">next:</span>     Add HG005 indel benchmark to CI
+<span class="ok2">blockers:</span> Indel F1 on HG005 lags SNV F1 by ~3 points</div>
+  <p class="small">Note the rejected OOM appears <em>only</em> under rejected hypotheses — once resolved, it is pruned from the blockers list rather than double-listed.</p>
 </section>
 
 <section>
@@ -149,23 +187,25 @@ ic resume</code></pre>
 </section>
 
 <section>
-  <h2>Validate the n+1 hypothesis</h2>
-  <p>
-    Bundled simulation harness replays a scripted multi-session narrative and reports whether the ledger actually carried useful signal forward.
-  </p>
-  <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
-  --reset --project-name "task-api"</code></pre>
-  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — and a binary verdict. On the demo: <span class="ok">n+1 POSITIVE</span> (score 0 → 17 over 3 iterations, 0 rejected beliefs reappeared, 75% of do-not-repeat items captured early).</p>
-</section>
-
-<section>
   <h2>Integrity guarantees</h2>
   <div class="grid">
     <div class="card"><h4>hash chain</h4><p>Every event carries <code>parentHash</code> + <code>sha256(canonicalJson(event))</code>. <code>ic verify</code> exits non-zero on any tamper.</p></div>
-    <div class="card"><h4>atomic evolve</h4><p>SQLite transaction wraps the evolution record, chain state, and events; jsonl is batch-appended only after commit.</p></div>
-    <div class="card"><h4>canonical JSON</h4><p>Sorted keys, deterministic bytes. Two processes hashing the same event produce identical hashes.</p></div>
-    <div class="card"><h4>append-only</h4><p>No rewrite path. Only way to drop history is to delete <code>.inference-chain/</code> outright.</p></div>
+    <div class="card"><h4>concurrency-safe</h4><p>A cross-process lock guards the read-build-append step, so a long-lived MCP server and CLI invocations can't fork the chain.</p></div>
+    <div class="card"><h4>content-parity verify</h4><p><code>ic verify</code> cross-checks every event's hash between the JSONL ledger and the SQLite mirror — not just row counts.</p></div>
+    <div class="card"><h4>locale-independent</h4><p>Canonical JSON sorts keys by code unit, so two machines hashing the same event produce identical bytes regardless of locale.</p></div>
+    <div class="card"><h4>atomic evolve</h4><p>A SQLite transaction wraps the evolution record, chain state, and events; JSONL is batch-appended only after commit.</p></div>
+    <div class="card"><h4>append-only</h4><p>No rewrite path. The only way to drop history is to delete <code>.inference-chain/</code> outright.</p></div>
   </div>
+</section>
+
+<section>
+  <h2>Validate the n+1 hypothesis</h2>
+  <p>
+    A bundled simulation harness replays a scripted multi-session narrative and reports whether the ledger actually carried useful signal forward.
+  </p>
+  <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
+  --reset --project-name "task-api"</code></pre>
+  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — plus a binary verdict. A scenario is <span class="ok">n+1 POSITIVE</span> when do-not-repeat coverage clears 50%, no rejected belief reappears, and the score trend is positive.</p>
 </section>
 
 <section>
@@ -193,7 +233,7 @@ ic resume</code></pre>
       <tr><td><code>ic evolve</code></td><td>Apply latest brief/update; emit MemoryEvolutionRecord</td></tr>
       <tr><td><code>ic resume</code></td><td>Generate <code>resumes/resume_latest.md</code></td></tr>
       <tr><td><code>ic status</code></td><td>Show iteration, event count, ledger sizes, score</td></tr>
-      <tr><td><code>ic verify</code></td><td>Replay hash chain; cross-check SQLite</td></tr>
+      <tr><td><code>ic verify</code></td><td>Replay hash chain; cross-check SQLite content</td></tr>
       <tr><td><code>ic mcp</code></td><td>Start MCP stdio server for Claude Desktop</td></tr>
       <tr><td><code>ic simulate &lt;dir&gt;</code></td><td>Replay session artifacts + n+1 metrics report</td></tr>
     </tbody>

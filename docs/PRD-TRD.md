@@ -555,7 +555,12 @@ MVP deterministic rules:
 1. Append new information to candidate learning pool.
 2. Add confirmed beliefs as supporting evidence to matching hypotheses;
    promote to `stable_learnings` after configurable confirmation count.
-3. Move rejected beliefs into `rejected_hypotheses`.
+3. Move rejected beliefs into `rejected_hypotheses`, and drop any
+   `current_frontier.blockers` entry whose text matches the rejected
+   belief (case-insensitive). A rejected belief is a resolved problem,
+   not an open blocker — keeping it in both sections double-lists it in
+   the resume brief. Applies to `rejected`, session `did_not_work`, and
+   the old belief in a `superseded` pair.
 4. Move superseded old beliefs into rejected / weakened state.
 5. Merge `do_not_repeat_delta` into ledger `do_not_repeat` (set semantics).
 6. Replace `current_frontier.next_best_action` if source has a non-empty
@@ -589,6 +594,9 @@ Fix: edit .inference-chain/inbox/latest-update.yml and rerun
   updates active hypothesis; do-not-repeat deltas merge without dupes;
   frontier updates correctly; SessionBrief increments iteration;
   InteractionUpdate does not increment unless requested.
+- **Blocker pruning** — rejecting a belief (via `rejected`,
+  `did_not_work`, or `superseded`) removes a matching
+  `current_frontier.blockers` entry; match is case-insensitive.
 - **CLI smoke** — `ic init` / `ingest` / `evolve` / `resume` / `verify`.
 
 ### 17. Package scripts
