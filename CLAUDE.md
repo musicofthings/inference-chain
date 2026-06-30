@@ -57,6 +57,15 @@ If a feature request fits one of those, push back and reference PRD §7.
 > excluded from v1 but were promoted into scope in PRD §20 (v1.1) and have
 > shipped (`src/mcp/server.ts`). They are no longer on the NOT list.
 
+> Note (v2.0): the opt-in **`ic teams`** module (`.inference/` markdown
+> masterplan, Husky pre-commit synthesis, PR review-bot distillation) lives in
+> `templates/teams/` + `src/integrations/teams/`. It deliberately uses
+> transcript distillation and model API calls — but ONLY inside the separate
+> `.inference/` team layer. The solo core (`.inference-chain/`, deterministic
+> `evolveLedger`, hash chain, `ic verify`) is unchanged and those exclusions
+> still apply to it. Do not route teams-mode LLM calls through the solo core.
+> See `docs/teams.md`.
+
 ## Working in this repo
 
 ### Common commands

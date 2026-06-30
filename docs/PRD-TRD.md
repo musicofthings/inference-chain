@@ -184,6 +184,18 @@ support interaction-level evolution.
 > originally excluded MCP from v1 to keep the build lean — that exclusion
 > is lifted in v1.1.
 
+> **v2.0 — Teams mode (opt-in, isolated).** The `ic teams` module deliberately
+> crosses several v1 lines — but only inside an opt-in `.inference/` team layer
+> that is entirely separate from the deterministic solo core (`.inference-chain/`,
+> the hash-chained ledger, `ic verify`). Specifically, teams mode adds:
+> *transcript distillation* (Prompt Engine 1 reads raw session logs), *model API
+> calls* (client-side semantic merge in a Git `pre-commit` hook), *team sync* (a
+> shared `masterplan.md` carried in Git), and *GitHub integration* (a PR-merge
+> Action that distills third-party review-bot feedback into `bot_ledger.md`).
+> These are intentional trade-offs for collaborative teams and do NOT alter the
+> solo engine: the deterministic ledger, pure `evolveLedger`, and hash-chain
+> integrity guarantees remain unchanged. See `docs/teams.md`.
+
 ### 8. Core design principle
 Git answers: *what changed in the code?*
 Claude Code memory answers: *what stable project rules should Claude know?*
@@ -295,9 +307,12 @@ verifies parent chain, reports corruption, exits non-zero on failure.
 `ic simulate <dir>` — sequential replay of pre-authored session artifacts with
 n+1 metrics output, for research and validation.
 
-**Out of scope:** cloud sync, team sync, vector search, model API calls,
-dashboard, GitHub integration, AST indexing, file-read interception,
-automatic transcript parsing, blockchain.
+**Out of scope (solo core):** cloud sync, team sync, vector search, model API
+calls, dashboard, GitHub integration, AST indexing, file-read interception,
+automatic transcript parsing, blockchain. Team sync, model API calls, GitHub
+integration, and transcript distillation are reintroduced ONLY in the opt-in
+v2.0 `ic teams` module (see §7 note and `docs/teams.md`); the solo core keeps
+all of these out of scope.
 
 ### 17. Success criteria
 1. A Claude Code session can produce a structured brief.

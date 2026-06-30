@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Installed by `ic teams init`. Delegates to the version-controlled gate so
+# the logic lives in the repo, not in the local .git/hooks copy.
+. "$(dirname -- "$0")/_/husky.sh" 2>/dev/null || true
+bash .inference/scripts/pre-commit.sh

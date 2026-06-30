@@ -19,6 +19,7 @@ import {
   type ChainLedger,
 } from './core/schemas.js';
 import { installClaude } from './integrations/claude/install.js';
+import { installTeams } from './integrations/teams/install.js';
 import { ensureLedgerFile } from './storage/jsonl.js';
 import { TEMPLATE } from './storage/packageAssets.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
@@ -136,6 +137,26 @@ program
     if (res.pluginInstalled) {
       console.log('Installed Claude Code Plugin scaffold at .claude/plugins/inference-chain/');
     }
+  });
+
+const teams = program
+  .command('teams')
+  .description('Team mode — shared .inference/ masterplan synthesized via Git hooks.');
+
+teams
+  .command('init')
+  .description('Scaffold .inference/, the Husky pre-commit hook, and the bot-distillation GitHub Action into this repo.')
+  .option('--overwrite', 'Overwrite existing teams files')
+  .action((opts: { overwrite?: boolean }) => {
+    const res = installTeams({ overwrite: opts.overwrite });
+    console.log(`Installed team mode into ${res.inferenceDir}`);
+    console.log(
+      `  files: ${res.installedFiles.length ? `${res.installedFiles.length} written` : '(none; existing files preserved — use --overwrite)'}`,
+    );
+    console.log(`  husky pre-commit: ${res.huskyInstalled ? 'installed' : 'skipped (exists)'}`);
+    console.log(`  bot-distill workflow: ${res.workflowInstalled ? 'installed' : 'skipped (exists)'}`);
+    if (res.packageJsonPatched) console.log('  package.json: added "prepare": "husky"');
+    console.log('Next: pnpm add -D husky && pnpm install, export ANTHROPIC_API_KEY, then author .inference/dev_<name>.md');
   });
 
 program

@@ -209,6 +209,25 @@ ic resume</code></pre>
 </section>
 
 <section>
+  <h2>Teams mode</h2>
+  <p>
+    For teams on a shared repo, two engines were built and compared. The
+    deterministic <strong>IC-native</strong> merge unions each developer's
+    structured ledger into one team ledger, while an optional LLM engine
+    distills raw sessions and PR review-bot feedback. The native engine is the
+    default: it is reproducible, hash-verifiable, free, and offline.
+  </p>
+  <div class="grid">
+    <div class="card"><h4>deterministic merge</h4><p>Per-developer ledgers union into a shared team ledger — order-independent and byte-reproducible, so it hash-verifies like the solo core.</p></div>
+    <div class="card"><h4>conflict detection</h4><p>A belief asserted by one dev and rejected by another is quarantined into an open question, never silently resolved.</p></div>
+    <div class="card"><h4>omnivorous loop</h4><p>Optional Git-hook + GitHub Action path distills human sessions and third-party review-bot feedback (CodeRabbit, Sonar, Snyk) into the masterplan.</p></div>
+    <div class="card"><h4>LLM at the edge</h4><p>Model calls only author schema-valid artifacts; the merge that decides shared truth stays deterministic.</p></div>
+  </div>
+  <p class="small">Bake-off result: the same two developer ledgers merged in either order produced an identical fingerprint (<code>9ee00bde…</code>) — deterministic and reproducible. See <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams-comparison.md">the full comparison</a> and <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams.md">teams docs</a>.</p>
+  <pre><code>ic teams init   # scaffold .inference/ + pre-commit hook + bot-distill Action</code></pre>
+</section>
+
+<section>
   <h2>Claude Desktop (MCP)</h2>
   <p>Add to <code>claude_desktop_config.json</code>:</p>
   <pre><code>{

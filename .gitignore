@@ -6,3 +6,7 @@ dist/
 Thumbs.db
 .env
 .env.local
+
+# Python bytecode (teams-mode synthesis engines)
+__pycache__/
+*.pyc

@@ -1,0 +1,102 @@
+name: Inference Chain — Bot Review Distillation
+
+# When a PR merges, harvest the third-party review-bot comments from the PR
+# thread, distill the genuine security/structural constraints via Claude, and
+# commit the result back into .inference/bot_ledger.md so the next local
+# session inherits the machine feedback.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  distill:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Anthropic SDK
+        run: pip install --quiet anthropic
+
+      - name: Harvest review-bot comments (GraphQL)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api graphql -f query='
+            query($owner:String!, $repo:String!, $pr:Int!) {
+              repository(owner:$owner, name:$repo) {
+                pullRequest(number:$pr) {
+                  comments(first:100) { nodes { author { login } body } }
+                  reviews(first:100) {
+                    nodes {
+                      author { login }
+                      body
+                      comments(first:100) { nodes { path body } }
+                    }
+                  }
+                }
+              }
+            }' \
+            -F owner="${GITHUB_REPOSITORY%/*}" \
+            -F repo="${GITHUB_REPOSITORY#*/}" \
+            -F pr="${PR_NUMBER}" > raw.json
+
+          # Flatten to plain text: only keep comments from automated reviewers.
+          python3 - <<'PY' > raw_bot_comments.txt
+          import json
+          BOTS = ("coderabbitai", "sonarcloud", "sonarqubecloud", "snyk-bot",
+                  "github-actions", "codex", "github-advanced-security",
+                  "deepsource", "codacy")
+          data = json.load(open("raw.json"))
+          pr = data["data"]["repository"]["pullRequest"]
+          def is_bot(login):
+              login = (login or "").lower()
+              return any(b in login for b in BOTS) or login.endswith("[bot]")
+          out = []
+          for c in pr["comments"]["nodes"]:
+              login = (c.get("author") or {}).get("login")
+              if is_bot(login):
+                  out.append(f"[{login}] {c['body']}")
+          for r in pr["reviews"]["nodes"]:
+              login = (r.get("author") or {}).get("login")
+              if is_bot(login) and r.get("body"):
+                  out.append(f"[{login}] {r['body']}")
+              for rc in r["comments"]["nodes"]:
+                  if is_bot(login):
+                      out.append(f"[{login}:{rc.get('path','')}] {rc['body']}")
+          print("\n\n".join(out))
+          PY
+          echo "Harvested $(wc -l < raw_bot_comments.txt) lines of bot feedback."
+
+      - name: Distill into bot_ledger.md
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 .inference/scripts/distill_bots.py --comments-file raw_bot_comments.txt
+
+      - name: Commit ledger update
+        run: |
+          rm -f raw.json raw_bot_comments.txt
+          if git diff --quiet -- .inference/bot_ledger.md; then
+            echo "No new structural constraints; bot_ledger.md unchanged."
+            exit 0
+          fi
+          git config user.name "inference-chain-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add .inference/bot_ledger.md
+          git commit -m "chore(inference-chain): distill bot review from PR #${{ github.event.pull_request.number }}"
+          git push
