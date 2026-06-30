@@ -9,6 +9,7 @@ Analyze the current `masterplan.md` alongside newly generated developer ledgers.
 2. State Evolution (Overwrite): If a new ledger explicitly supersedes an established decision, update the masterplan entry and move the old entry into the "Rejected Approaches" section detailing the new context.
 3. Conflict Detection (Strict): If two developer ledgers contain mutually exclusive architectural patterns, DO NOT guess. You must immediately inject a `> [!WARNING] CONFLICT:` block into the markdown section, naming both ledger authors and the contradiction.
 4. Garbage Collection (Token Economy): Scan the "Rejected Approaches" and historical logs. If an approach is completely stale (older than 30 iterations or irrelevant to the active branch architecture), extract it into a dedicated `<archive_block>` so the script can offload it to `archive.md`. Keep `masterplan.md` lean.
+5. ASCII punctuation: use plain ASCII (write ">=" not the unicode greater-or-equal, "-" not an em-dash) so the masterplan renders correctly on every console and editor.
 </rules>
 <context>
 Today's date is {{CURRENT_DATE}}. Use this exact value for any `updated`

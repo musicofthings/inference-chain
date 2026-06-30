@@ -76,8 +76,10 @@ Git-tracked `masterplan.md` the whole team (and their AI assistants) reads.
    mutually-exclusive patterns (aborting the commit), and offloads stale nodes
    to `archive.md`.
 3. **Bot Review Distillation** (`prompts/03`, `distill_bots.py`) — runs in CI on
-   PR merge. Filters lint/format noise, honors `overrides.md`, and appends real
-   security/structural constraints to `bot_ledger.md`.
+   PR merge. Filters lint/format noise, honors `overrides.md`, and merges real
+   security/structural constraints into `bot_ledger.md`, deduplicating against
+   what is already recorded (the whole file is rewritten, not appended, so the
+   ledger does not accumulate duplicates across PRs).
 
 ## Setup
 

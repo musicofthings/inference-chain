@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Cloud-side automated-review distillation engine (Prompt Engine 3).
 
-Runs in CI (GitHub Actions) when a PR merges. Reads raw bot review comments
-plus the human overrides, distills genuine security/structural constraints
-via Claude, and appends them to bot_ledger.md.
+Runs in CI (GitHub Actions) when a PR merges. Reads raw bot review comments,
+the human overrides, AND the current bot_ledger.md, then asks Claude to return
+the COMPLETE updated ledger with new constraints merged in and duplicates
+collapsed. The whole file is rewritten (not appended), so the ledger
+self-deduplicates across runs/PRs — the same approach the masterplan merge uses.
 
 Raw comments are provided by the workflow either as a file (--comments-file)
 or on stdin.
@@ -18,6 +20,7 @@ from _ic_common import (
     INFERENCE_DIR,
     call_claude,
     die,
+    extract_tag,
     fill,
     load_prompt,
     read_text,
@@ -54,26 +57,32 @@ def main() -> int:
         print("[inference-chain/teams] No bot comments supplied; nothing to distill.")
         return 0
 
+    existing = read_text(BOT_LEDGER, default="")
+    if not existing.strip():
+        die("bot_ledger.md missing or empty — run `ic teams init` first.")
     overrides = read_text(OVERRIDES, default="(no overrides configured)")
 
     user = fill(
         load_prompt("03-bot-distillation.md"),
+        CURRENT_DATE=today(),
+        CURRENT_BOT_LEDGER=existing,
         HUMAN_OVERRIDES_CONTENT=overrides,
         RAW_BOT_COMMENTS_TEXT=raw,
     )
-    system = "You execute the Automated Review Synthesizer task exactly as specified. Output only the requested Markdown sections."
+    system = "You execute the Automated Review Synthesizer task exactly as specified. Output only the requested <updated_bot_ledger> tag."
 
-    distilled = call_claude(system, user).strip()
-    if not distilled:
-        print("[inference-chain/teams] Nothing survived distillation (all noise/overridden).")
+    response = call_claude(system, user)
+    updated = extract_tag(response, "updated_bot_ledger").strip()
+
+    # Never let a bad/empty model response wipe the ledger.
+    if not updated:
+        die("Distiller returned no <updated_bot_ledger>; leaving bot_ledger.md unchanged.")
+
+    if updated.rstrip() == existing.rstrip():
+        print("[inference-chain/teams] No new constraints; bot_ledger.md unchanged.")
         return 0
 
-    existing = read_text(BOT_LEDGER, default="")
-    if not existing:
-        die("bot_ledger.md missing — run `ic teams init` first.")
-
-    merged = f"{existing.rstrip()}\n\n<!-- distilled {today()} -->\n{distilled}\n"
-    write_text(BOT_LEDGER, merged)
+    write_text(BOT_LEDGER, updated.rstrip() + "\n")
     print("[inference-chain/teams] bot_ledger.md updated.")
     return 0
 
