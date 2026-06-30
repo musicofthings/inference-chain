@@ -66,6 +66,11 @@ describe('mergeTeamLedgersFromDir', () => {
     expect(result.teamLedger.stable_learnings).toEqual(['A']);
   });
 
+  it('reports an actionable error for a malformed dev ledger', () => {
+    writeFileSync(join(dir, 'dev_broken.yml'), 'project_id: x\niteration: not-a-number\n');
+    expect(() => mergeTeamLedgersFromDir(dir)).toThrow(/Invalid developer ledger dev_broken\.yml/);
+  });
+
   it('throws when no developer ledgers are present', () => {
     mkdirSync(join(dir, 'empty'), { recursive: true });
     expect(() => mergeTeamLedgersFromDir(join(dir, 'empty'))).toThrow(/No developer ledgers/);

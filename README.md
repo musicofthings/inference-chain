@@ -145,6 +145,22 @@ resolves `.inference-chain/` from `--cwd`, so multiple Desktop projects can
 each have their own ledger — as long as each session starts in the same
 folder, the ledger is the key.
 
+## Teams (shared repo)
+
+Two ways to share context across a team, both via `ic teams`:
+
+- **Deterministic merge (recommended core):** each developer keeps a
+  `dev_<name>.yml` `ChainLedger`; `ic teams merge ./ledgers --out team-ledger.yml
+  --resume` unions them into one team ledger with no model call — reproducible
+  and `ic verify`-friendly. `--strict` exits non-zero on conflicts for CI.
+- **LLM synthesis (opt-in):** `ic teams init` scaffolds an `.inference/`
+  masterplan, a Husky pre-commit hook that distills developer ledgers via
+  Claude, and a GitHub Action that distills PR review-bot feedback. This path
+  uses model API calls and is isolated from the deterministic solo core.
+
+See `docs/teams.md`, the bake-off in `docs/teams-comparison.md`, and the
+`distill` front-end design in `docs/teams-distill-scope.md`.
+
 ## Validate the n+1 hypothesis on a demo
 
 ```bash

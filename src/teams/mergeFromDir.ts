@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import YAML from 'yaml';
 import { renderResumeBrief } from '../core/resume.js';
-import { ChainLedgerSchema } from '../core/schemas.js';
+import { type ChainLedger, ChainLedgerSchema } from '../core/schemas.js';
 import { type TeamInput, type TeamMergeResult, mergeTeamLedgers } from './merge.js';
 
 export type DirMergeResult = {
@@ -18,6 +18,16 @@ const DEV_FILE = /^dev[-_](.+)\.ya?ml$/i;
 function authorOf(file: string): string {
   const m = basename(file).match(DEV_FILE);
   return m ? m[1] : basename(file).replace(/\.ya?ml$/i, '');
+}
+
+function parseLedger(path: string): ChainLedger {
+  try {
+    return ChainLedgerSchema.parse(YAML.parse(readFileSync(path, 'utf8')));
+  } catch (err) {
+    // Surface a single actionable line naming the file, not a raw ZodError dump.
+    const reason = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    throw new Error(`Invalid developer ledger ${basename(path)}: ${reason}`);
+  }
 }
 
 /**
@@ -38,7 +48,7 @@ export function mergeTeamLedgersFromDir(dir: string): DirMergeResult {
 
   const inputs: TeamInput[] = files.map((f) => ({
     author: authorOf(f),
-    ledger: ChainLedgerSchema.parse(YAML.parse(readFileSync(join(dir, f), 'utf8'))),
+    ledger: parseLedger(join(dir, f)),
   }));
 
   const result = mergeTeamLedgers(inputs);
