@@ -20,6 +20,7 @@ import {
 } from './core/schemas.js';
 import { installClaude } from './integrations/claude/install.js';
 import { installTeams } from './integrations/teams/install.js';
+import { mergeTeamLedgersFromDir } from './teams/mergeFromDir.js';
 import { ensureLedgerFile } from './storage/jsonl.js';
 import { TEMPLATE } from './storage/packageAssets.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
@@ -157,6 +158,40 @@ teams
     console.log(`  bot-distill workflow: ${res.workflowInstalled ? 'installed' : 'skipped (exists)'}`);
     if (res.packageJsonPatched) console.log('  package.json: added "prepare": "husky"');
     console.log('Next: pnpm add -D husky && pnpm install, export ANTHROPIC_API_KEY, then author .inference/dev_<name>.md');
+  });
+
+teams
+  .command('merge')
+  .description('Deterministically merge per-developer ledgers (dev_<name>.yml) in a directory into one team ledger. No model call.')
+  .argument('<dir>', 'Directory containing dev_<name>.yml ChainLedger files')
+  .option('--out <file>', 'Write the merged team ledger YAML to this path')
+  .option('--resume', 'Also print the team resume brief')
+  .option('--strict', 'Exit non-zero if any conflicts are detected (for CI gating)')
+  .action((dir: string, opts: { out?: string; resume?: boolean; strict?: boolean }) => {
+    const { result, teamYaml, resume, authors } = mergeTeamLedgersFromDir(p(dir));
+    const { teamLedger, conflicts } = result;
+
+    if (opts.out) {
+      writeFileSync(p(opts.out), teamYaml);
+      console.log(`Wrote team ledger to ${opts.out}`);
+    }
+    console.log(
+      `Merged ${authors.length} developer ledger(s) [${authors.join(', ')}] -> iteration ${teamLedger.iteration}.`,
+    );
+    console.log(
+      `  stable: ${teamLedger.stable_learnings.length}  active_hyp: ${teamLedger.active_hypotheses.length}  rejected: ${teamLedger.rejected_hypotheses.length}  conflicts: ${conflicts.length}`,
+    );
+    for (const c of conflicts) {
+      console.log(`  ⚠ CONFLICT: ${c.belief} — ${c.detail}`);
+    }
+    if (opts.resume) {
+      console.log('\n--- team resume brief ---\n');
+      console.log(resume);
+    }
+    if (opts.strict && conflicts.length > 0) {
+      console.error(`Conflicts detected (${conflicts.length}); failing due to --strict.`);
+      process.exit(1);
+    }
   });
 
 program

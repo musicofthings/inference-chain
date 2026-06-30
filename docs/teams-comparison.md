@@ -79,5 +79,8 @@ the core.**
   unit-tested (`test/teamsInstall.test.ts`), and validated end-to-end on Windows
   against a real Git repo (clean merge, supersession, and conflict paths — see
   `docs/teams.md`). Runtime synthesis requires an `ANTHROPIC_API_KEY`.
-- Not yet wired: a CLI surface for the native merge (`ic teams merge`) and the
-  edge `distill` step. Proposed as the next milestone if the hybrid is approved.
+- Native merge CLI: wired as `ic teams merge <dir>` (deterministic, no model
+  call) — reads `dev_<name>.yml` ledgers, writes the merged team ledger, renders
+  a team resume brief, and `--strict` exits non-zero on conflicts for CI gating.
+- Not yet wired: the optional edge `distill` step (raw session log ->
+  schema-valid `dev_<name>.yml`), which would complete the hybrid.

@@ -136,6 +136,30 @@ Windows, Python 3.14) against a real Git repository. Confirmed working:
 The CI bot-distillation Action (`distill_bots.py`) can be smoke-tested locally
 with a hand-written comments file (`--comments-file`) without a GitHub round-trip.
 
+## IC-native merge (`ic teams merge`)
+
+A deterministic alternative to the LLM synthesis engine, for teams that want
+the team ledger to be reproducible and `ic verify`-friendly. Each developer
+keeps a structured `dev_<name>.yml` ChainLedger; the command unions them into
+one team ledger with no model call:
+
+```bash
+ic teams merge ./ledgers --out team-ledger.yml --resume --strict
+```
+
+- **Deterministic + order-independent** — the output depends only on the set of
+  inputs, so two machines merging the same ledgers produce identical results.
+- **Conflict detection** — a belief asserted by one developer (in
+  `stable_learnings`/`active_hypotheses`) and rejected by another is quarantined
+  into an open question rather than silently resolved.
+- **`--strict`** exits non-zero when conflicts exist, so CI can gate a merge.
+- **`--resume`** prints the team resume brief (the same renderer the solo core
+  uses).
+
+This is the "native" half of the bake-off in `docs/teams-comparison.md`: LLMs
+stay at the edge (authoring artifacts), determinism stays at the core (the
+merge that decides shared truth).
+
 ## Relationship to the solo core
 
 Teams mode does not touch `.inference-chain/`, `evolveLedger`, the JSONL hash
