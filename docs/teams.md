@@ -110,6 +110,30 @@ it; the hook does the rest.
 | Bot false positives   | Engine 3 matches `overrides.md`   | Add the rule id / path to `overrides.md`              |
 | No API key / SDK      | `pre-commit.sh` exits 1 early     | Install `anthropic`, export `ANTHROPIC_API_KEY`       |
 
+## Validation status
+
+The spec engine has been validated end-to-end on Windows (PowerShell, Git for
+Windows, Python 3.14) against a real Git repository. Confirmed working:
+
+- **Clean merge** — a single developer ledger synthesizes into a fresh
+  `masterplan.md` and the commit completes with the merge staged in.
+- **Supersession (Rule 2)** — a later ledger that explicitly abandons a prior
+  decision overwrites it and moves the old one to *Rejected Approaches*, no
+  conflict raised.
+- **Conflict (Rule 3)** — two developers asserting mutually exclusive choices
+  for the same step in one commit inject a `> [!WARNING] CONFLICT:` block and
+  abort the commit for human resolution.
+- **Prerequisite guards** — missing Python, missing `anthropic` SDK, and a
+  blank `ANTHROPIC_API_KEY` each fail fast with an actionable message and block
+  the commit.
+- **Conflict detection** does not false-positive on prose mentions of the
+  marker (driven by an explicit `<has_conflict>` flag plus a line-anchored
+  check), and frontmatter timestamps use the real system date injected by
+  `local_merge.py`.
+
+The CI bot-distillation Action (`distill_bots.py`) can be smoke-tested locally
+with a hand-written comments file (`--comments-file`) without a GitHub round-trip.
+
 ## Relationship to the solo core
 
 Teams mode does not touch `.inference-chain/`, `evolveLedger`, the JSONL hash

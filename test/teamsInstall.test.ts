@@ -37,6 +37,8 @@ describe('installTeams scaffolder', () => {
     }
     expect(res.huskyInstalled).toBe(true);
     expect(res.workflowInstalled).toBe(true);
+    expect(existsSync(join(tmp, '.gitattributes'))).toBe(true);
+    expect(readFileSync(join(tmp, '.gitattributes'), 'utf8')).toContain('.husky/pre-commit text eol=lf');
   });
 
   it('adds prepare:husky without clobbering an existing prepare', () => {

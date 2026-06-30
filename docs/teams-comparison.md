@@ -76,7 +76,8 @@ the core.**
 - Native engine: implemented (`src/teams/merge.ts`), unit-tested
   (`test/teamsMerge.test.ts`, 5 cases), and demonstrated above.
 - Spec engine: implemented (`templates/teams/`, `ic teams init`), scaffolder
-  unit-tested (`test/teamsInstall.test.ts`). Runtime synthesis requires an API
-  key and was not executed in CI.
+  unit-tested (`test/teamsInstall.test.ts`), and validated end-to-end on Windows
+  against a real Git repo (clean merge, supersession, and conflict paths — see
+  `docs/teams.md`). Runtime synthesis requires an `ANTHROPIC_API_KEY`.
 - Not yet wired: a CLI surface for the native merge (`ic teams merge`) and the
   edge `distill` step. Proposed as the next milestone if the hybrid is approved.

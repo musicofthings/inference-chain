@@ -1,3 +1,11 @@
+allowBuilds:
+  '@biomejs/biome': false
+  better-sqlite3: false
+  esbuild: false
+# Packages allowed to run install/build scripts. pnpm 10+ blocks native build
+# scripts by default; better-sqlite3 needs its native addon compiled, and
+# esbuild/biome ship platform binaries via postinstall.
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild
+  - '@biomejs/biome'

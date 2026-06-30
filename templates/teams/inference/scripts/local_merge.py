@@ -73,6 +73,7 @@ def main() -> int:
 
     user = fill(
         load_prompt("02-semantic-merge.md"),
+        CURRENT_DATE=today(),
         CURRENT_MASTERPLAN_CONTENT=current,
         DEVELOPER_LEDGER_CONTENTS=bundle,
     )
@@ -96,7 +97,16 @@ def main() -> int:
 
     print(f"[inference-chain/teams] {report}")
 
-    if CONFLICT_MARKER in updated:
+    # Trust the model's explicit flag, and as a backstop require the marker to
+    # begin a line (a real callout) — not merely appear in prose where the
+    # model describes the conflict rules. A loose substring match produced
+    # false-positive aborts when the model echoed the marker while reporting
+    # "no conflicts".
+    flagged = extract_tag(response, "has_conflict").strip().lower() == "true"
+    has_block = any(
+        line.lstrip().startswith(CONFLICT_MARKER) for line in updated.splitlines()
+    )
+    if flagged or has_block:
         die(
             "Semantic conflict detected. masterplan.md now contains a CONFLICT "
             "block. Resolve it, then re-commit.",

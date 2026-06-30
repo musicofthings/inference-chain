@@ -17,6 +17,7 @@ export type TeamsInstallResult = {
   huskyInstalled: boolean;
   workflowInstalled: boolean;
   packageJsonPatched: boolean;
+  gitattributesPatched: boolean;
 };
 
 const EXECUTABLE = new Set(['.sh', '.py']);
@@ -57,12 +58,16 @@ export function installTeams(opts: { overwrite?: boolean } = {}): TeamsInstallRe
   // 4) Best-effort: ensure `npm install` re-binds the hook via Husky.
   const packageJsonPatched = patchPrepareScript(p('package.json'));
 
+  // 5) Keep hooks/scripts LF so a Windows checkout cannot CRLF-corrupt bash.
+  const gitattributesPatched = ensureGitattributes(p('.gitattributes'));
+
   return {
     inferenceDir: p('.inference'),
     installedFiles: installed,
     huskyInstalled,
     workflowInstalled,
     packageJsonPatched,
+    gitattributesPatched,
   };
 }
 
@@ -108,6 +113,26 @@ function makeExecutableIfNeeded(path: string): void {
       // executable bit from the template covers those cases.
     }
   }
+}
+
+const GITATTR_MARKER = '# inference-chain teams mode';
+const GITATTR_BLOCK = `${GITATTR_MARKER} — keep hooks/scripts LF (bash chokes on CRLF)
+.husky/pre-commit text eol=lf
+.inference/scripts/*.sh text eol=lf
+.inference/scripts/*.py text eol=lf
+`;
+
+/** Ensure the LF rules for hooks/scripts exist in .gitattributes. */
+function ensureGitattributes(path: string): boolean {
+  if (!existsSync(path)) {
+    writeFileSync(path, GITATTR_BLOCK, 'utf8');
+    return true;
+  }
+  const current = readFileSync(path, 'utf8');
+  if (current.includes(GITATTR_MARKER)) return false;
+  const sep = current.endsWith('\n') ? '\n' : '\n\n';
+  writeFileSync(path, `${current}${sep}${GITATTR_BLOCK}`, 'utf8');
+  return true;
 }
 
 /** Add `"prepare": "husky"` without clobbering an existing prepare script. */
