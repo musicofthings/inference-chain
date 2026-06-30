@@ -82,5 +82,7 @@ the core.**
 - Native merge CLI: wired as `ic teams merge <dir>` (deterministic, no model
   call) — reads `dev_<name>.yml` ledgers, writes the merged team ledger, renders
   a team resume brief, and `--strict` exits non-zero on conflicts for CI gating.
-- Not yet wired: the optional edge `distill` step (raw session log ->
-  schema-valid `dev_<name>.yml`), which would complete the hybrid.
+- Edge `distill` step: implemented (`distill_session.py` + prompt 04, edge LLM)
+  with `ic teams validate` and `ic teams sync` (deterministic core). The hybrid
+  loop is complete: raw log -> dev_<name>.yml (LLM, edge) -> team ledger
+  (deterministic, core).

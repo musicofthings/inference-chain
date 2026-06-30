@@ -136,6 +136,32 @@ Windows, Python 3.14) against a real Git repository. Confirmed working:
 The CI bot-distillation Action (`distill_bots.py`) can be smoke-tested locally
 with a hand-written comments file (`--comments-file`) without a GitHub round-trip.
 
+## Hybrid pipeline: distill -> validate -> sync
+
+The full IC-native team flow keeps the LLM at the edge and determinism at the
+core:
+
+```bash
+# 1. EDGE (LLM): each developer distills their own raw session log into a
+#    schema-valid dev_<name>.yml. Requires ANTHROPIC_API_KEY + Python.
+python .inference/scripts/distill_session.py \
+  --log session.txt --author shibi --project variant-pipeline
+
+# 2. (optional) check one ledger against the schema
+ic teams validate .inference/dev_shibi.yml
+
+# 3. commit dev_<name>.yml so it travels with the repo, then assemble:
+#    CORE (deterministic): validate every dev ledger, merge, write the team
+#    ledger, and print the resume brief — no model call.
+ic teams sync .inference --strict
+```
+
+`distill_session.py` auto-increments the iteration from any existing
+`dev_<author>.yml` (or takes `--iteration`), refuses to write on empty/garbled
+model output, and prints the next commands. The authoritative schema check is
+the TS core (`ic teams validate` / `ic teams sync`), so a drifted distiller
+fails loudly at the boundary rather than corrupting a merge.
+
 ## IC-native merge (`ic teams merge`)
 
 A deterministic alternative to the LLM synthesis engine, for teams that want

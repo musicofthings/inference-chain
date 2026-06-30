@@ -6,6 +6,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import { nanoid } from 'nanoid';
 import YAML from 'yaml';
@@ -20,7 +21,7 @@ import {
 } from './core/schemas.js';
 import { installClaude } from './integrations/claude/install.js';
 import { installTeams } from './integrations/teams/install.js';
-import { mergeTeamLedgersFromDir } from './teams/mergeFromDir.js';
+import { loadDevLedger, mergeTeamLedgersFromDir } from './teams/mergeFromDir.js';
 import { ensureLedgerFile } from './storage/jsonl.js';
 import { TEMPLATE } from './storage/packageAssets.js';
 import { IC_DIR, PATHS, SUBDIRS, ic, p } from './storage/paths.js';
@@ -192,6 +193,39 @@ teams
       console.error(`Conflicts detected (${conflicts.length}); failing due to --strict.`);
       process.exit(1);
     }
+  });
+
+teams
+  .command('validate')
+  .description('Validate a developer ledger (dev_<name>.yml) against the ChainLedger schema.')
+  .argument('<file>', 'Path to a dev_<name>.yml ChainLedger')
+  .action((file: string) => {
+    const ledger = loadDevLedger(p(file));
+    console.log(
+      `OK: valid ChainLedger (project ${ledger.project_id}, iteration ${ledger.iteration}).`,
+    );
+  });
+
+teams
+  .command('sync')
+  .description('One-shot deterministic assembly: validate every dev_<name>.yml in a directory, merge, write the team ledger, and print the resume brief.')
+  .argument('<dir>', 'Directory containing dev_<name>.yml ChainLedger files')
+  .option('--out <file>', 'Team ledger output path (default <dir>/team-ledger.yml)')
+  .option('--strict', 'Exit non-zero if any conflicts are detected')
+  .action((dir: string, opts: { out?: string; strict?: boolean }) => {
+    const { result, teamYaml, resume, authors } = mergeTeamLedgersFromDir(p(dir));
+    const { teamLedger, conflicts } = result;
+    const out = opts.out ?? join(dir, 'team-ledger.yml');
+
+    for (const a of authors) console.log(`  validated dev_${a}.yml`);
+    writeFileSync(p(out), teamYaml);
+    console.log(
+      `Synced ${authors.length} ledger(s) -> ${out} (iteration ${teamLedger.iteration}, conflicts ${conflicts.length}).`,
+    );
+    for (const c of conflicts) console.log(`  ⚠ CONFLICT: ${c.belief} — ${c.detail}`);
+    console.log('\n--- team resume brief ---\n');
+    console.log(resume);
+    if (opts.strict && conflicts.length > 0) process.exit(1);
   });
 
 program

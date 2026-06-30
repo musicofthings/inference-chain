@@ -1,7 +1,10 @@
 # Scope: the edge `distill` step (hybrid front-end)
 
-> Status: **design / not yet implemented.** This is the missing front-end that
-> completes the hybrid recommended in `docs/teams-comparison.md`.
+> Status: **IMPLEMENTED.** Shipped as `prompts/04-session-distill.md` +
+> `.inference/scripts/distill_session.py` (edge) plus `ic teams validate` and
+> `ic teams sync` (deterministic core). This document is the design of record.
+> Decisions taken: dev ledgers are committed to Git (shared); trust-and-merge
+> (no mandatory human review gate); built through the `sync` convenience.
 
 ## Why
 
