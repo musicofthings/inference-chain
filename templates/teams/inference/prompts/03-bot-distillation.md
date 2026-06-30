@@ -43,10 +43,25 @@ frontmatter field. Do not invent a date.
 </input_data>
 <output_format>
 Output ONLY a single `<updated_bot_ledger>` tag containing the COMPLETE updated
-bot_ledger.md file and nothing else. Inside it:
-- YAML frontmatter: `type: bot-ledger` and `updated: {{CURRENT_DATE}}`.
-- A `## Security Constraints Discovered` section.
-- A `## Structural Constraints Discovered` section.
-Each section is a deduplicated Markdown bullet list; write `_None yet._` if a
-section has no entries. No prose or extra sections outside these.
+bot_ledger.md file and nothing else. Reproduce the following header EXACTLY,
+verbatim, only substituting today's date into the frontmatter:
+
+---
+type: bot-ledger
+updated: {{CURRENT_DATE}}
+---
+
+# Automated Review Ledger
+
+Permanent, high-level constraints distilled from third-party review-bot
+feedback on merged Pull Requests. Linting/formatting noise is filtered out;
+only genuine security exposures and severe design-pattern flaws are kept.
+
+## Security Constraints Discovered
+
+## Structural Constraints Discovered
+
+Below each of the two section headers, write the deduplicated Markdown bullet
+list of constraints (or `_None yet._` if that section has no entries). Do not
+alter the header text above, and add no prose or extra sections.
 </output_format>
