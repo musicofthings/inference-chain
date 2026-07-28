@@ -11,22 +11,16 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛓</text></svg>">
 <style>
   :root {
-    --bg: #0d1117;
-    --bg-elev: #161b22;
-    --fg: #e6edf3;
-    --fg-dim: #8b949e;
-    --accent: #f0c674;
-    --accent-2: #7ee787;
-    --warn: #ff7b72;
-    --border: #30363d;
+    --bg: #ffffff;
+    --bg-elev: #f6f8fa;
+    --fg: #1f2328;
+    --fg-dim: #59636e;
+    --accent: #9a6700;
+    --accent-2: #1a7f37;
+    --warn: #cf222e;
+    --border: #d1d9e0;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #ffffff; --bg-elev: #f6f8fa; --fg: #1f2328; --fg-dim: #59636e;
-      --accent: #9a6700; --accent-2: #1a7f37; --warn: #cf222e; --border: #d1d9e0;
-    }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -73,10 +67,10 @@
   .card h4 { margin: 0 0 6px; font-size: 14px; font-family: var(--mono); color: var(--accent); }
   .card p { margin: 0; font-size: 14px; color: var(--fg-dim); }
   table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 16px; }
-  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--fg-dim); font-weight: 600; font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
   td code { font-size: 12.5px; }
-  .ok { color: var(--accent-2); }
+  .ok { color: var(--accent-2); font-weight: 600; }
   .no { color: var(--warn); }
   footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 13px; color: var(--fg-dim); }
   .arrow { color: var(--fg-dim); }
@@ -96,13 +90,19 @@
   .brief .h { color: var(--accent); }
   .brief .rej { color: var(--warn); }
   .brief .ok2 { color: var(--accent-2); }
+  .metric-val { font-family: var(--mono); font-weight: 600; }
+  .banner {
+    background: #eef6ee; border: 1px solid #b7e0b7; border-radius: 8px;
+    padding: 14px 18px; margin: 0 0 16px; font-size: 14px;
+  }
+  .banner strong { color: var(--accent-2); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header>
-  <div class="chip">v0.2.0 · Apache-2.0 · local-first</div>
+  <div class="chip">v0.2.0 · Apache-2.0 · local-first · n+1 POSITIVE</div>
   <h1>Inference <span class="ac">Chain</span></h1>
   <p class="tagline">A forward-only <code>n+1</code> inference ledger for Claude Code. Every session continues sharper than the last.</p>
   <p style="margin-top: 24px;">
@@ -132,16 +132,16 @@
     <div class="card"><h4>not RAG</h4><p>No embeddings, no vector DB, no retrieval layer.</p></div>
     <div class="card"><h4>not a transcript</h4><p>No chain-of-thought, no tool logs, no terminal capture.</p></div>
     <div class="card"><h4>not blockchain</h4><p>Local SHA-256 hash chain for integrity. That's it.</p></div>
-    <div class="card"><h4>not SaaS</h4><p>100% local. No telemetry. No API calls.</p></div>
+    <div class="card"><h4>not SaaS</h4><p>100% local. No telemetry. Solo core makes no API calls.</p></div>
   </div>
 </section>
 
 <section>
   <h2>How the ledger stays sharp</h2>
-  <p>Evolution is deterministic, not a model call. Each update reshapes the operating context with a few simple, auditable rules:</p>
+  <p>Evolution is deterministic, not a model call. Each update reshapes the operating context with auditable rules:</p>
   <div class="grid">
-    <div class="card"><h4>promote</h4><p>A belief confirmed enough times graduates from <code>active_hypotheses</code> into <code>stable_learnings</code>.</p></div>
-    <div class="card"><h4>reject &amp; stay rejected</h4><p>Rejected beliefs move to <code>rejected_hypotheses</code> so the next session won't rediscover them.</p></div>
+    <div class="card"><h4>exclusive beliefs</h4><p>A belief lives in at most one of active / stable / rejected. Reject demotes stable knowledge; re-confirm clears a prior rejection.</p></div>
+    <div class="card"><h4>promote</h4><p>Evidence accumulates until a hypothesis graduates into <code>stable_learnings</code> (threshold configurable via <code>IC_STABLE_THRESHOLD</code>).</p></div>
     <div class="card"><h4>prune resolved blockers</h4><p>Rejecting a belief drops any matching frontier blocker — a solved problem stops resurfacing in the brief.</p></div>
     <div class="card"><h4>converge the frontier</h4><p>The next-best-action set is replaced, not appended, so the frontier sharpens instead of bloating.</p></div>
   </div>
@@ -151,19 +151,44 @@
   <h2>The resume brief</h2>
   <p>This is what the next session actually receives — a current operating model, not a log to re-read.</p>
   <div class="brief"><span class="h">## Current operating model</span>
-DeepVariant (WGS) + GLnexus with sharded joint genotyping is the right stack.
+Token-bucket per API key is the right model; sliding-window per IP was rejected
 Confidence: high
 
 <span class="h">## Stable learnings</span>
-- Sharding GLnexus by chromosome eliminates the OOM at 100 samples
+- fastify is the right choice for this API
+- enable WAL mode on db open
+- token-bucket per API key for rate limiting
 
 <span class="h">## Rejected hypotheses</span>
-- <span class="rej">GLnexus OOMs at 64GB on 100-sample cohort</span> — rejected@1
+- <span class="rej">express handles streaming JSON well</span> — rejected@0
+- <span class="rej">sliding-window per IP — false positives behind NAT</span> — rejected@3
 
 <span class="h">## Current frontier</span>
-<span class="ok2">next:</span>     Add HG005 indel benchmark to CI
-<span class="ok2">blockers:</span> Indel F1 on HG005 lags SNV F1 by ~3 points</div>
-  <p class="small">Note the rejected OOM appears <em>only</em> under rejected hypotheses — once resolved, it is pruned from the blockers list rather than double-listed.</p>
+<span class="ok2">next:</span>     write integration tests for token-bucket limits
+<span class="ok2">do-not-repeat:</span> use express for streaming JSON endpoints</div>
+  <p class="small">From the shipped <code>build-task-api</code> demo after 8 simulated steps. Rejected paths stay rejected; the frontier points at the next useful action.</p>
+</section>
+
+<section>
+  <h2>Eval results — n+1 POSITIVE</h2>
+  <div class="banner">
+    The bundled <code>build-task-api</code> scenario (8 scripted steps, 3 iterations) is
+    <strong>n+1 POSITIVE</strong>: the ledger carried useful signal forward.
+  </div>
+  <table>
+    <thead><tr><th>metric</th><th>result</th><th>gate</th></tr></thead>
+    <tbody>
+      <tr><td><code>anti_repeat_coverage</code></td><td class="metric-val">0.75</td><td class="ok">≥ 0.5 ✓</td></tr>
+      <tr><td><code>rejected_persistence</code></td><td class="metric-val">0</td><td class="ok">= 0 ✓</td></tr>
+      <tr><td><code>score_progression</code></td><td class="metric-val">+5.667 / iter</td><td class="ok">> 0 ✓</td></tr>
+      <tr><td><code>hypothesis_promotion_rate</code></td><td class="metric-val">1.0</td><td>—</td></tr>
+      <tr><td><code>frontier_convergence</code></td><td class="metric-val">1.0</td><td>focused</td></tr>
+      <tr><td><code>final_brief_size_kb</code></td><td class="metric-val">1.96</td><td>under 8</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Score path: <code>0 → 3 → 4 → 6 → 6 → 5 → 10 → 17</code>. After the run, <code>ic verify</code> reports a valid hash chain, SQLite content parity, and a <code>current.yml</code> tip that matches the last <code>ledger_evolved</code> event. Ablations with <code>IC_STABLE_THRESHOLD</code> 1 / 2 / 3 and <code>IC_RESUME_TOP_K=3</code> all remain n+1-positive.</p>
+  <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
+  --reset --project-name "task-api"</code></pre>
 </section>
 
 <section>
@@ -190,22 +215,12 @@ ic resume</code></pre>
   <h2>Integrity guarantees</h2>
   <div class="grid">
     <div class="card"><h4>hash chain</h4><p>Every event carries <code>parentHash</code> + <code>sha256(canonicalJson(event))</code>. <code>ic verify</code> exits non-zero on any tamper.</p></div>
-    <div class="card"><h4>concurrency-safe</h4><p>A cross-process lock guards the read-build-append step, so a long-lived MCP server and CLI invocations can't fork the chain.</p></div>
-    <div class="card"><h4>content-parity verify</h4><p><code>ic verify</code> cross-checks every event's hash between the JSONL ledger and the SQLite mirror — not just row counts.</p></div>
-    <div class="card"><h4>locale-independent</h4><p>Canonical JSON sorts keys by code unit, so two machines hashing the same event produce identical bytes regardless of locale.</p></div>
-    <div class="card"><h4>atomic evolve</h4><p>A SQLite transaction wraps the evolution record, chain state, and events; JSONL is batch-appended only after commit.</p></div>
-    <div class="card"><h4>append-only</h4><p>No rewrite path. The only way to drop history is to delete <code>.inference-chain/</code> outright.</p></div>
+    <div class="card"><h4>locked evolve path</h4><p>One re-entrant lock covers load → resolve inbox → capture → commit → archive, so CLI + MCP cannot double-apply or fork the chain.</p></div>
+    <div class="card"><h4>content-parity verify</h4><p>Cross-checks every event hash between JSONL and SQLite, and that <code>current.yml</code> matches the last evolved tip.</p></div>
+    <div class="card"><h4>atomic writes</h4><p>SQLite transaction first; JSONL batch-append after commit; <code>current.yml</code> via temp-file + rename.</p></div>
+    <div class="card"><h4>locale-independent</h4><p>Canonical JSON sorts keys by code unit, so two machines hashing the same event produce identical bytes.</p></div>
+    <div class="card"><h4>append-only</h4><p>No rewrite path. The only way to drop history is to delete <code>.inference-chain/</code> or re-init with <code>--force</code>.</p></div>
   </div>
-</section>
-
-<section>
-  <h2>Validate the n+1 hypothesis</h2>
-  <p>
-    A bundled simulation harness replays a scripted multi-session narrative and reports whether the ledger actually carried useful signal forward.
-  </p>
-  <pre><code>ic simulate examples/demo-project/build-task-api/sessions \
-  --reset --project-name "task-api"</code></pre>
-  <p class="small">Reports six metrics — <code>anti_repeat_coverage</code>, <code>hypothesis_promotion_rate</code>, <code>frontier_convergence</code>, <code>rejected_persistence</code>, <code>score_progression</code>, <code>final_brief_size_kb</code> — plus a binary verdict. A scenario is <span class="ok">n+1 POSITIVE</span> when do-not-repeat coverage clears 50%, no rejected belief reappears, and the score trend is positive.</p>
 </section>
 
 <section>
@@ -219,12 +234,14 @@ ic resume</code></pre>
   </p>
   <div class="grid">
     <div class="card"><h4>deterministic merge</h4><p>Per-developer ledgers union into a shared team ledger — order-independent and byte-reproducible, so it hash-verifies like the solo core.</p></div>
-    <div class="card"><h4>conflict detection</h4><p>A belief asserted by one dev and rejected by another is quarantined into an open question, never silently resolved.</p></div>
-    <div class="card"><h4>omnivorous loop</h4><p>Optional Git-hook + GitHub Action path distills human sessions and third-party review-bot feedback (CodeRabbit, Sonar, Snyk) into the masterplan.</p></div>
-    <div class="card"><h4>LLM at the edge</h4><p>Model calls only author schema-valid artifacts; the merge that decides shared truth stays deterministic.</p></div>
+    <div class="card"><h4>conflict detection</h4><p>A belief asserted by one dev and rejected by another is quarantined into an open question, never silently resolved. <code>--strict</code> fails CI on conflicts.</p></div>
+    <div class="card"><h4>project_id guard</h4><p>Ledgers with different <code>project_id</code> values refuse to merge — no silent identity drift.</p></div>
+    <div class="card"><h4>LLM at the edge</h4><p>Optional hooks distill sessions and review-bot feedback; the merge that decides shared truth stays deterministic.</p></div>
   </div>
-  <p class="small">Bake-off result: the same two developer ledgers merged in either order produced an identical fingerprint (<code>9ee00bde…</code>) — deterministic and reproducible. See <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams-comparison.md">the full comparison</a> and <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams.md">teams docs</a>.</p>
-  <pre><code>ic teams init   # scaffold .inference/ + pre-commit hook + bot-distill Action</code></pre>
+  <p class="small">See <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams-comparison.md">the full comparison</a> and <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams.md">teams docs</a>.</p>
+  <pre><code>ic teams init
+ic teams merge ./ledgers --out team-ledger.yml --resume --strict
+ic teams sync ./ledgers</code></pre>
 </section>
 
 <section>
@@ -246,15 +263,16 @@ ic resume</code></pre>
   <table>
     <thead><tr><th>command</th><th>what it does</th></tr></thead>
     <tbody>
-      <tr><td><code>ic init</code></td><td>Initialize <code>.inference-chain/</code>, SQLite, JSONL, templates</td></tr>
+      <tr><td><code>ic init</code></td><td>Initialize <code>.inference-chain/</code>; <code>--force</code> wipes and re-inits</td></tr>
       <tr><td><code>ic install-claude</code></td><td>Install slash commands + plugin scaffold; merge hooks</td></tr>
-      <tr><td><code>ic ingest &lt;file&gt;</code></td><td>Validate + store an artifact (routes by <code>kind</code>)</td></tr>
-      <tr><td><code>ic evolve</code></td><td>Apply latest brief/update; emit MemoryEvolutionRecord</td></tr>
+      <tr><td><code>ic ingest &lt;file&gt;</code></td><td>Validate + store an artifact (idempotent on id)</td></tr>
+      <tr><td><code>ic evolve</code></td><td>Apply latest brief/update under the ledger lock</td></tr>
       <tr><td><code>ic resume</code></td><td>Generate <code>resumes/resume_latest.md</code></td></tr>
       <tr><td><code>ic status</code></td><td>Show iteration, event count, ledger sizes, score</td></tr>
-      <tr><td><code>ic verify</code></td><td>Replay hash chain; cross-check SQLite content</td></tr>
+      <tr><td><code>ic verify</code></td><td>Replay hash chain; SQLite parity; <code>current.yml</code> tip</td></tr>
       <tr><td><code>ic mcp</code></td><td>Start MCP stdio server for Claude Desktop</td></tr>
       <tr><td><code>ic simulate &lt;dir&gt;</code></td><td>Replay session artifacts + n+1 metrics report</td></tr>
+      <tr><td><code>ic teams …</code></td><td><code>init</code> / <code>merge</code> / <code>validate</code> / <code>sync</code> for shared ledgers</td></tr>
     </tbody>
   </table>
 </section>

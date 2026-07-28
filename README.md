@@ -79,6 +79,12 @@ ic install-claude
    `.claude/plugins/inference-chain/` so the project can be enabled with
    `/plugin` if your Claude Code version supports plugins.
 
+Re-init is refused unless you pass `--force` (wipes `.inference-chain/`):
+
+```bash
+ic init --project-name "My Project" --force
+```
+
 ## Daily use
 
 **Mid-session checkpoint (interaction-level evolution):**
@@ -113,17 +119,22 @@ ic resume
 frontier without rediscovering rejected hypotheses.
 
 ## Commands
-| Command                    | What it does                                              |
-| -------------------------- | --------------------------------------------------------- |
-| `ic init --project-name`   | Initialize `.inference-chain/`, SQLite, JSONL, templates  |
-| `ic install-claude`        | Install slash commands, merge hooks, install plugin scaffold |
-| `ic ingest <file>`         | Validate + store an artifact (routes by `kind`)           |
-| `ic evolve [--advance]`    | Apply latest brief/update; emit MemoryEvolutionRecord     |
-| `ic resume [--silent]`     | Generate `resumes/resume_latest.md`                        |
-| `ic status`                | Show iteration, event count, ledger sizes, score          |
-| `ic verify`                | Replay hash chain; compare against SQLite event count     |
-| `ic mcp [--cwd <dir>]`     | Start an MCP stdio server for Claude Desktop              |
-| `ic simulate <dir>`        | Replay session artifacts and print n+1 sharpness metrics  |
+| Command                         | What it does                                              |
+| ------------------------------- | --------------------------------------------------------- |
+| `ic init --project-name`        | Initialize `.inference-chain/`, SQLite, JSONL, templates  |
+| `ic init --force`               | Wipe an existing project and re-initialize                |
+| `ic install-claude`             | Install slash commands, merge hooks, install plugin scaffold |
+| `ic ingest <file>`              | Validate + store an artifact (routes by `kind`; idempotent on id) |
+| `ic evolve [--advance]`         | Apply latest brief/update under the ledger lock           |
+| `ic resume [--silent]`          | Generate `resumes/resume_latest.md`                        |
+| `ic status`                     | Show iteration, event count, ledger sizes, score          |
+| `ic verify`                     | Replay hash chain; SQLite parity; `current.yml` tip check |
+| `ic mcp [--cwd <dir>]`          | Start an MCP stdio server for Claude Desktop              |
+| `ic simulate <dir>`             | Replay session artifacts and print n+1 sharpness metrics  |
+| `ic teams init`                 | Scaffold `.inference/` + Husky hook + bot-distill Action  |
+| `ic teams merge <dir>`          | Deterministic multi-dev ledger merge (`--out/--resume/--strict`) |
+| `ic teams validate <file>`      | Schema-check a `dev_<name>.yml` ledger                    |
+| `ic teams sync <dir>`           | Validate all, merge, write team ledger, print resume      |
 
 ## Claude Desktop (MCP)
 Add an entry to your `claude_desktop_config.json`:
@@ -153,6 +164,7 @@ Two ways to share context across a team, both via `ic teams`:
   `dev_<name>.yml` `ChainLedger`; `ic teams merge ./ledgers --out team-ledger.yml
   --resume` unions them into one team ledger with no model call — reproducible
   and `ic verify`-friendly. `--strict` exits non-zero on conflicts for CI.
+  Ledgers must share the same `project_id` or merge fails.
 - **LLM synthesis (opt-in):** `ic teams init` scaffolds an `.inference/`
   masterplan, a Husky pre-commit hook that distills developer ledgers via
   Claude, and a GitHub Action that distills PR review-bot feedback. This path
@@ -161,7 +173,7 @@ Two ways to share context across a team, both via `ic teams`:
 See `docs/teams.md`, the bake-off in `docs/teams-comparison.md`, and the
 `distill` front-end design in `docs/teams-distill-scope.md`.
 
-## Validate the n+1 hypothesis on a demo
+## Validate the n+1 hypothesis (evals)
 
 ```bash
 cd /tmp && mkdir ic-demo && cd ic-demo
@@ -170,13 +182,61 @@ ic simulate /path/to/inference-chain/examples/demo-project/build-task-api/sessio
 ```
 
 Prints per-step deltas (stable+, rejected+, do-not-repeat+, frontier) and a
-final report with six metrics that quantify whether the ledger actually
-carried useful signal forward. See `docs/PRD-TRD.md` §22 for what each
-metric means.
+final report with six metrics. A scenario is **n+1-positive** when
+`anti_repeat_coverage ≥ 0.5`, `rejected_persistence = 0`, and
+`score_progression > 0`. See `docs/PRD-TRD.md` §22 for metric definitions.
+
+### Latest eval snapshot (`build-task-api`, 8 steps)
+
+| Metric | Result | Gate |
+| --- | --- | --- |
+| `anti_repeat_coverage` | **0.75** | ≥ 0.5 ✓ |
+| `rejected_persistence` | **0** | = 0 ✓ |
+| `score_progression` | **+5.667 / iter** | > 0 ✓ |
+| `hypothesis_promotion_rate` | 1.0 | — |
+| `frontier_convergence` | 1.0 | focused |
+| `final_brief_size_kb` | 1.96 | under 8 ✓ |
+
+**Verdict: n+1 POSITIVE** — ledger carried useful signal forward.
+
+Score path: `0 → 3 → 4 → 6 → 6 → 5 → 10 → 17` over 3 iterations.
+`ic verify` after the run: hash chain valid, SQLite in sync, `current.yml`
+matches the last `ledger_evolved` tip.
+
+Ablations (same scenario):
+
+| Config | Verdict | Note |
+| --- | --- | --- |
+| Default `IC_STABLE_THRESHOLD=2` | n+1 POSITIVE | baseline |
+| `IC_STABLE_THRESHOLD=1` | n+1 POSITIVE | promotes earlier when evidence allows |
+| `IC_STABLE_THRESHOLD=3` | n+1 POSITIVE | promotion delayed to second explicit confirm |
+| `IC_RESUME_TOP_K=3` | n+1 POSITIVE | smaller brief, same gates |
+
+Team merge synthetic eval (2 developers, one assert/deny conflict): conflict
+quarantined into an open question; `--strict` exits non-zero; divergent
+`project_id` values are rejected. Exclusive-belief e2e: promote then reject
+removes the item from stable and keeps it only under rejected.
+
+Unit/integration suite: **66 tests** green after the hardening pass.
+
+## How the ledger stays sharp
+
+Evolution is deterministic (not a model call). A few rules keep the resume
+brief coherent:
+
+- **Exclusive belief sections.** A belief lives in at most one of
+  active / stable / rejected. Reject demotes stable knowledge; re-confirm
+  clears a prior rejection.
+- **Promote.** Confirmations accumulate; at `IC_STABLE_THRESHOLD` the
+  hypothesis graduates to `stable_learnings`.
+- **Prune resolved blockers.** Rejecting a belief drops any matching
+  frontier blocker so solved problems stop resurfacing.
+- **Converge the frontier.** Non-empty `next_action_delta` / session
+  `next_best_action` *replace* the frontier rather than append forever.
 
 ## Tuning (environment variables)
-- `IC_STABLE_THRESHOLD` (default `2`) — how many confirmations promote an
-  active hypothesis to `stable_learnings`.
+- `IC_STABLE_THRESHOLD` (default `2`) — how many supporting-evidence items
+  promote an active hypothesis to `stable_learnings`.
 - `IC_RESUME_TOP_K` (default `12`) — cap on items per section in the
   resume brief (full ledger always lives in `current.yml`).
 
@@ -196,30 +256,40 @@ metric means.
 - **Hash chain.** Each ledger event includes `parentEventId` + `parentHash`,
   and a `hash` of `sha256(canonicalJson(event-without-hash))`. `ic verify`
   recomputes the chain and exits non-zero on any tamper or broken link.
-- **Atomic evolve.** Every `ic evolve` (and its MCP / simulate equivalents)
-  wraps the evolution record + chain state + new chain events in a single
-  SQLite transaction, and only batch-appends to `ledger.jsonl` after that
-  transaction commits. A failed commit leaves nothing partially applied;
-  the jsonl is never out of sync ahead of SQLite.
-- **Canonical JSON.** Hashes are computed over a sorted-key serialization,
-  so two processes that build the same event produce byte-identical bytes.
+- **Locked evolve path.** `ic evolve` (CLI + MCP) holds a re-entrant
+  cross-process lock across load → resolve inbox → capture → commit →
+  archive, so two processes cannot double-apply the same inbox file or fork
+  the hash chain.
+- **Atomic evolve.** Evolution record + chain state + events are written in
+  one SQLite transaction; JSONL is batch-appended only after commit.
+  `current.yml` is written via temp-file + rename.
+- **Content-parity verify.** `ic verify` checks JSONL↔SQLite event hashes
+  (not just counts) and that `current.yml` matches the last
+  `ledger_evolved` tip.
+- **Canonical JSON.** Hashes use code-unit key ordering (locale-independent).
 - **Append-only.** `evolve` never rewrites prior events. The only way to
-  remove history is to delete `.inference-chain/` outright.
+  remove history is to delete `.inference-chain/` (or `ic init --force`).
+- **Idempotent capture.** Re-ingesting the same artifact id does not append
+  a duplicate `*_captured` event.
+- **Absolute paths.** CLI args like `/tmp/ledgers` resolve correctly (via
+  `path.resolve`, not `path.join` against cwd).
 
 ## Privacy
 **100% local.** Nothing leaves your machine. No telemetry. No model API
-calls. The entire workflow runs against your filesystem.
+calls in the solo core. The entire workflow runs against your filesystem.
+(The opt-in teams LLM engines are separate and require an explicit
+`ANTHROPIC_API_KEY`.)
 
 ## What we deliberately do not build
 Per PRD §7: blockchain, vector search, cloud sync, dashboards, transcript
 archive, code-diff tracking, AST indexing, telemetry. (An MCP stdio server
 *is* shipped in v0.2 — `ic mcp` — but only as a thin adapter over the same
-local artifacts; there is still no network surface.) If a proposed feature
-fits one of those, it does not belong here.
+local artifacts; there is still no network surface on the solo core.) If a
+proposed feature fits one of those, it does not belong here.
 
 ## Development
 ```bash
-pnpm test       # 31 tests: canonicalJson, hash, verify, schemas, evolve transitions, inbox automation
+pnpm test       # 66 tests: evolve math, hash chain, verify, lock, teams, bootstrap, inbox
 pnpm build
 pnpm lint
 pnpm format
