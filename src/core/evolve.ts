@@ -205,13 +205,19 @@ export function evolveLedger(
 		dropFromStable(newBelief);
 		const idx = findHypothesisIndex(next.active_hypotheses, newBelief);
 		if (idx < 0) {
-			next.active_hypotheses.push({
+			const h: ActiveHypothesis = {
 				hypothesis: newBelief,
 				confidence: "medium",
 				supporting_evidence: [reason],
 				contradicting_evidence: [],
 				first_seen_at_iteration: fromIteration,
-			});
+			};
+			next.active_hypotheses.push(h);
+			tryPromote(h, next.active_hypotheses.length - 1);
+		} else {
+			const h = next.active_hypotheses[idx];
+			h.supporting_evidence = uniqueAppend(h.supporting_evidence, [reason]);
+			tryPromote(h, idx);
 		}
 		supersededRecords.push({
 			old_belief: oldBelief,
@@ -221,10 +227,13 @@ export function evolveLedger(
 	};
 
 	const applyDoNotRepeat = (items: string[]) => {
+		const seen = new Set(next.do_not_repeat.map(norm));
 		for (const item of items) {
 			const trimmed = item.trim();
 			if (!trimmed) continue;
-			if (next.do_not_repeat.some((d) => norm(d) === norm(trimmed))) continue;
+			const key = norm(trimmed);
+			if (seen.has(key)) continue;
+			seen.add(key);
 			next.do_not_repeat.push(trimmed);
 			antiRepeatAdded.push(trimmed);
 		}

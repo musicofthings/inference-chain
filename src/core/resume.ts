@@ -26,13 +26,15 @@ export function renderResumeBrief(ledger: ChainLedger): string {
     const { shown, hidden } = cap(ledger.active_hypotheses);
     const lines = shown.map(
       (h) =>
-        `- (${h.confidence}) ${h.hypothesis}` +
-        (h.supporting_evidence.length
-          ? `\n  - supporting: ${h.supporting_evidence.join('; ')}`
-          : '') +
-        (h.contradicting_evidence.length
-          ? `\n  - contradicting: ${h.contradicting_evidence.join('; ')}`
-          : ''),
+        `- (${h.confidence}) ${h.hypothesis}${
+          h.supporting_evidence.length
+            ? `\n  - supporting: ${h.supporting_evidence.join('; ')}`
+            : ''
+        }${
+          h.contradicting_evidence.length
+            ? `\n  - contradicting: ${h.contradicting_evidence.join('; ')}`
+            : ''
+        }`,
     );
     if (hidden > 0) lines.push(`- _…and ${hidden} older hypotheses in current.yml_`);
     return lines.join('\n');

@@ -16,6 +16,11 @@ import argparse
 import sys
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # Windows — flock unavailable; best-effort without it
+    fcntl = None  # type: ignore[assignment]
+
 from _ic_common import (
     INFERENCE_DIR,
     call_claude,
@@ -30,6 +35,7 @@ from _ic_common import (
 
 OVERRIDES = INFERENCE_DIR / "overrides.md"
 BOT_LEDGER = INFERENCE_DIR / "bot_ledger.md"
+LOCK_PATH = BOT_LEDGER.with_suffix(BOT_LEDGER.suffix + ".lock")
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,13 +56,7 @@ def read_comments(path: "Path | None") -> str:
     return ""
 
 
-def main() -> int:
-    args = parse_args()
-    raw = read_comments(args.comments_file).strip()
-    if not raw:
-        print("[inference-chain/teams] No bot comments supplied; nothing to distill.")
-        return 0
-
+def _distill_locked(raw: str) -> int:
     existing = read_text(BOT_LEDGER, default="")
     if not existing.strip():
         die("bot_ledger.md missing or empty — run `ic teams init` first.")
@@ -85,6 +85,24 @@ def main() -> int:
     write_text(BOT_LEDGER, updated.rstrip() + "\n")
     print("[inference-chain/teams] bot_ledger.md updated.")
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    raw = read_comments(args.comments_file).strip()
+    if not raw:
+        print("[inference-chain/teams] No bot comments supplied; nothing to distill.")
+        return 0
+
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOCK_PATH.open("a+", encoding="utf-8") as lockf:
+        if fcntl is not None:
+            fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+        try:
+            return _distill_locked(raw)
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
 
 
 if __name__ == "__main__":

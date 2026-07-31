@@ -18,6 +18,7 @@ import {
 } from "./core/schemas.js";
 import { writeFileAtomic } from "./storage/atomicWrite.js";
 import { verifyChain } from "./storage/jsonl.js";
+import { withLock } from "./storage/lock.js";
 import { PATHS, ic } from "./storage/paths.js";
 import {
 	appendChainEvent,
@@ -157,43 +158,48 @@ export async function runSimulation(opts: {
 			};
 			const kind = detectKind(raw);
 
-			const before = loadCurrent();
-			const beforeScore = scoreLedger(before);
-
-			let source: Parameters<typeof runEvolution>[0]["source"];
-			let archive: () => void;
 			const briefInbox = ic("inbox", "latest-brief.yml");
 			const updateInbox = ic("inbox", "latest-update.yml");
-			let sourceId: string;
-			let advanceFlag: boolean;
 
-			if (kind === "session_brief") {
-				const brief = SessionBriefSchema.parse(raw);
-				source = { kind: "session", value: brief };
-				sourceId = brief.id;
-				advanceFlag = true;
-				copyFileSync(fullPath, briefInbox);
-				captureBrief(db, brief, "simulate");
-				archive = () => archiveInboxFile(briefInbox, ic("briefs"), brief.id);
-			} else {
-				const upd = InteractionUpdateSchema.parse(raw);
-				source = { kind: "interaction", value: upd };
-				sourceId = upd.id;
-				advanceFlag = false;
-				copyFileSync(fullPath, updateInbox);
-				captureUpdate(db, upd, "simulate");
-				archive = () => archiveInboxFile(updateInbox, ic("updates"), upd.id);
-			}
-
-			const outcome = runEvolution({
-				db,
-				ledger: before,
-				source,
-				advance: advanceFlag,
-				sourceId,
-				archiveInbox: archive,
-				via: "simulate",
-			});
+			// Hold the ledger lock across inbox copy → capture → evolve so an
+			// external ic evolve / MCP chain_evolve cannot interleave.
+			const { before, beforeScore, outcome } = withLock(
+				PATHS.ledgerLock(),
+				() => {
+					const before = loadCurrent();
+					const beforeScore = scoreLedger(before);
+					if (kind === "session_brief") {
+						const brief = SessionBriefSchema.parse(raw);
+						copyFileSync(fullPath, briefInbox);
+						captureBrief(db, brief, "simulate");
+						const outcome = runEvolution({
+							db,
+							ledger: before,
+							source: { kind: "session", value: brief },
+							advance: true,
+							sourceId: brief.id,
+							archiveInbox: () =>
+								archiveInboxFile(briefInbox, ic("briefs"), brief.id),
+							via: "simulate",
+						});
+						return { before, beforeScore, outcome };
+					}
+					const upd = InteractionUpdateSchema.parse(raw);
+					copyFileSync(fullPath, updateInbox);
+					captureUpdate(db, upd, "simulate");
+					const outcome = runEvolution({
+						db,
+						ledger: before,
+						source: { kind: "interaction", value: upd },
+						advance: false,
+						sourceId: upd.id,
+						archiveInbox: () =>
+							archiveInboxFile(updateInbox, ic("updates"), upd.id),
+						via: "simulate",
+					});
+					return { before, beforeScore, outcome };
+				},
+			);
 			const after = outcome.validated;
 
 			const promotedThisStep = outcome.record.promoted_to_stable.length;

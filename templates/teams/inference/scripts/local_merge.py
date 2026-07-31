@@ -91,9 +91,13 @@ def main() -> int:
     write_text(MASTERPLAN, updated.rstrip() + "\n")
 
     if archive_block:
-        existing = read_text(ARCHIVE, default="")
-        merged = f"{existing.rstrip()}\n\n<!-- archived {today()} -->\n{archive_block.rstrip()}\n"
-        write_text(ARCHIVE, merged)
+        # Append-only — archive.md only grows; avoid full rewrite on pre-commit.
+        ARCHIVE.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "\n" if ARCHIVE.exists() and ARCHIVE.stat().st_size > 0 else ""
+        with ARCHIVE.open("a", encoding="utf-8") as fh:
+            fh.write(
+                f"{prefix}<!-- archived {today()} -->\n{archive_block.rstrip()}\n"
+            )
 
     print(f"[inference-chain/teams] {report}")
 

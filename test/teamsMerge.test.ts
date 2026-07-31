@@ -22,12 +22,6 @@ const ledger = (over: Partial<ChainLedger> = {}): ChainLedger => ({
 	...over,
 });
 
-const stripVolatile = (l: ChainLedger) => ({
-	...l,
-	updated_at: "X",
-	continuity_summary: "X",
-});
-
 describe("mergeTeamLedgers", () => {
 	it("unions and dedupes stable learnings across developers", () => {
 		const inputs: TeamInput[] = [
@@ -95,15 +89,53 @@ describe("mergeTeamLedgers", () => {
 	it("is order-independent (deterministic regardless of input order)", () => {
 		const a: TeamInput = {
 			author: "shibi",
-			ledger: ledger({ stable_learnings: ["A"], do_not_repeat: ["x"] }),
+			ledger: ledger({
+				stable_learnings: ["A"],
+				do_not_repeat: ["x"],
+				updated_at: "2026-01-02T00:00:00Z",
+			}),
 		};
 		const b: TeamInput = {
 			author: "alex",
-			ledger: ledger({ stable_learnings: ["B"], do_not_repeat: ["y"] }),
+			ledger: ledger({
+				stable_learnings: ["B"],
+				do_not_repeat: ["y"],
+				updated_at: "2026-01-03T00:00:00Z",
+			}),
 		};
-		const ab = stripVolatile(mergeTeamLedgers([a, b]).teamLedger);
-		const ba = stripVolatile(mergeTeamLedgers([b, a]).teamLedger);
+		const ab = mergeTeamLedgers([a, b]).teamLedger;
+		const ba = mergeTeamLedgers([b, a]).teamLedger;
 		expect(ab).toEqual(ba);
+		expect(ab.updated_at).toBe("2026-01-03T00:00:00Z");
+	});
+
+	it("stable wins over active when developers assert the same belief in different sections", () => {
+		const inputs: TeamInput[] = [
+			{
+				author: "alice",
+				ledger: ledger({ stable_learnings: ["X works"] }),
+			},
+			{
+				author: "bob",
+				ledger: ledger({
+					active_hypotheses: [
+						{
+							hypothesis: "X works",
+							confidence: "medium",
+							supporting_evidence: ["unit"],
+							contradicting_evidence: [],
+							first_seen_at_iteration: 1,
+						},
+					],
+				}),
+			},
+		];
+		const { teamLedger, conflicts } = mergeTeamLedgers(inputs);
+		expect(conflicts).toHaveLength(0);
+		expect(teamLedger.stable_learnings).toContain("X works");
+		expect(
+			teamLedger.active_hypotheses.find((h) => h.hypothesis === "X works"),
+		).toBeUndefined();
 	});
 
 	it("prunes a team blocker that any developer has rejected", () => {

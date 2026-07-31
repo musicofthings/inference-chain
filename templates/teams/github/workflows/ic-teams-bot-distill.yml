@@ -2,8 +2,13 @@ name: Inference Chain — Bot Review Distillation
 
 # When a PR merges, harvest the third-party review-bot comments from the PR
 # thread, distill the genuine security/structural constraints via Claude, and
-# commit the result back into .inference/bot_ledger.md so the next local
-# session inherits the machine feedback.
+# open a reviewable PR that updates .inference/bot_ledger.md (never push
+# LLM output directly to the default branch).
+#
+# SECURITY: This job runs `python3 .inference/scripts/distill_bots.py` from the
+# consumer repo with ANTHROPIC_API_KEY. Treat merges that touch
+# `.inference/scripts/**` or this workflow as secret-equivalent — require
+# CODEOWNERS review on those paths.
 
 on:
   pull_request:
@@ -11,7 +16,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   distill:
@@ -46,7 +51,7 @@ jobs:
                     nodes {
                       author { login }
                       body
-                      comments(first:100) { nodes { path body } }
+                      comments(first:100) { nodes { path body author { login } } }
                     }
                   }
                 }
@@ -57,16 +62,19 @@ jobs:
             -F pr="${PR_NUMBER}" > raw.json
 
           # Flatten to plain text: only keep comments from automated reviewers.
+          # Exact allowlist or GitHub App `[bot]` suffix — never substring match.
           python3 - <<'PY' > raw_bot_comments.txt
           import json
-          BOTS = ("coderabbitai", "sonarcloud", "sonarqubecloud", "snyk-bot",
-                  "github-actions", "codex", "github-advanced-security",
-                  "deepsource", "codacy")
+          BOTS = {
+              "coderabbitai", "sonarcloud", "sonarqubecloud", "snyk-bot",
+              "github-actions", "codex", "github-advanced-security",
+              "deepsource", "codacy",
+          }
           data = json.load(open("raw.json"))
           pr = data["data"]["repository"]["pullRequest"]
           def is_bot(login):
               login = (login or "").lower()
-              return any(b in login for b in BOTS) or login.endswith("[bot]")
+              return login in BOTS or login.endswith("[bot]")
           out = []
           for c in pr["comments"]["nodes"]:
               login = (c.get("author") or {}).get("login")
@@ -77,8 +85,9 @@ jobs:
               if is_bot(login) and r.get("body"):
                   out.append(f"[{login}] {r['body']}")
               for rc in r["comments"]["nodes"]:
-                  if is_bot(login):
-                      out.append(f"[{login}:{rc.get('path','')}] {rc['body']}")
+                  rc_login = (rc.get("author") or {}).get("login")
+                  if is_bot(rc_login):
+                      out.append(f"[{rc_login}:{rc.get('path','')}] {rc['body']}")
           print("\n\n".join(out))
           PY
           echo "Harvested $(wc -l < raw_bot_comments.txt) lines of bot feedback."
@@ -88,7 +97,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python3 .inference/scripts/distill_bots.py --comments-file raw_bot_comments.txt
 
-      - name: Commit ledger update
+      - name: Open reviewable PR with ledger update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           rm -f raw.json raw_bot_comments.txt
           if git diff --quiet -- .inference/bot_ledger.md; then
@@ -97,6 +110,14 @@ jobs:
           fi
           git config user.name "inference-chain-bot"
           git config user.email "bot@users.noreply.github.com"
+          BRANCH="chore/ic-bot-distill-pr-${PR_NUMBER}"
+          git checkout -B "$BRANCH"
           git add .inference/bot_ledger.md
-          git commit -m "chore(inference-chain): distill bot review from PR #${{ github.event.pull_request.number }}"
-          git push
+          git commit -m "chore(inference-chain): distill bot review from PR #${PR_NUMBER}"
+          git push -u origin "$BRANCH" --force-with-lease
+          gh pr create --base "$DEFAULT_BRANCH" \
+            --title "chore(inference-chain): bot ledger distill from PR #${PR_NUMBER}" \
+            --body "Automated distill of review-bot comments from PR #${PR_NUMBER}.
+
+          Human review required before merge — treat as untrusted LLM output." \
+            || echo "PR may already exist for ${BRANCH}; continuing."

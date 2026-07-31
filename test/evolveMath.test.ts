@@ -200,6 +200,24 @@ describe("evolveLedger — interaction transitions", () => {
 		);
 	});
 
+	it("superseded new belief promotes immediately when stablePromotionThreshold is 1", () => {
+		const u = update({
+			superseded: [
+				{ old_belief: "use REST", new_belief: "use gRPC", reason: "latency" },
+			],
+		});
+		const { updatedLedger } = evolveLedger(
+			baseLedger(),
+			{ kind: "interaction", value: u },
+			false,
+			{ stablePromotionThreshold: 1 },
+		);
+		expect(updatedLedger.stable_learnings).toContain("use gRPC");
+		expect(
+			updatedLedger.active_hypotheses.find((h) => h.hypothesis === "use gRPC"),
+		).toBeUndefined();
+	});
+
 	it("do_not_repeat_delta merges without duplicates", () => {
 		const u1 = update({
 			do_not_repeat_delta: ["mock DB in integration tests"],

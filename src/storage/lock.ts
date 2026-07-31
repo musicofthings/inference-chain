@@ -2,6 +2,8 @@ import {
 	closeSync,
 	mkdirSync,
 	openSync,
+	readFileSync,
+	renameSync,
 	rmSync,
 	statSync,
 	writeSync,
@@ -35,6 +37,40 @@ function sleepSync(ms: number): void {
 	Atomics.wait(shared, 0, 0, ms);
 }
 
+/** True if `pid` still exists (signal 0). */
+function pidAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Break an abandoned lock via atomic rename so only one waiter wins the
+ * race. Never steals from a still-living holder (even if mtime is stale).
+ */
+function tryBreakStaleLock(lockPath: string): void {
+	let holderPid: number | undefined;
+	try {
+		const raw = readFileSync(lockPath, "utf8").split(/\s/)[0] ?? "";
+		const parsed = Number.parseInt(raw, 10);
+		if (Number.isFinite(parsed)) holderPid = parsed;
+	} catch {
+		// Unreadable lock — treat as abandoned.
+	}
+	if (holderPid !== undefined && pidAlive(holderPid)) return;
+
+	const stolen = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+	try {
+		renameSync(lockPath, stolen);
+		rmSync(stolen, { force: true });
+	} catch {
+		// Another waiter won the rename race — retry open(wx).
+	}
+}
+
 /**
  * Run `fn` while holding an exclusive cross-process lock backed by an
  * O_EXCL lockfile. Serializes the read-build-append critical section so two
@@ -65,10 +101,9 @@ export function withLock<T>(
 			writeSync(fd, `${process.pid} ${new Date().toISOString()}\n`);
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-			// Lock held by someone else. Break it if it is stale, otherwise wait.
 			try {
 				const age = Date.now() - statSync(lockPath).mtimeMs;
-				if (age > opts.staleMs) rmSync(lockPath, { force: true });
+				if (age > opts.staleMs) tryBreakStaleLock(lockPath);
 			} catch {
 				// Lock vanished between open and stat — fine, just retry.
 			}

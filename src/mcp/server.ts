@@ -13,6 +13,7 @@ import {
 } from "../core/schemas.js";
 import { writeFileAtomic } from "../storage/atomicWrite.js";
 import { lastEvent } from "../storage/jsonl.js";
+import { withLock } from "../storage/lock.js";
 import { PATHS, ic } from "../storage/paths.js";
 import {
 	appendChainEvent,
@@ -99,13 +100,18 @@ export async function startMcpServer(): Promise<void> {
 
 	server.tool(
 		"chain_ingest_update",
-		"Validate and persist an InteractionUpdate. Body may be YAML or JSON matching the InteractionUpdate schema (kind: interaction_update).",
+		"Validate and persist an InteractionUpdate. Body may be YAML or JSON matching the InteractionUpdate schema (kind: interaction_update). Idempotent on artifact id: a duplicate id refreshes the inbox file but does not append a second capture event.",
 		{ body: z.string().describe("YAML or JSON text of an InteractionUpdate") },
 		async ({ body }) => {
 			requireProject();
 			const parsed = parseArtifact(InteractionUpdateSchema, body);
-			writeFileAtomic(ic("inbox", "latest-update.yml"), YAML.stringify(parsed));
-			const { alreadyPresent } = captureUpdate(getDb(), parsed, "mcp");
+			const { alreadyPresent } = withLock(PATHS.ledgerLock(), () => {
+				writeFileAtomic(
+					ic("inbox", "latest-update.yml"),
+					YAML.stringify(parsed),
+				);
+				return captureUpdate(getDb(), parsed, "mcp");
+			});
 			const note = alreadyPresent ? " (already captured; inbox refreshed)" : "";
 			return {
 				content: [
@@ -120,13 +126,18 @@ export async function startMcpServer(): Promise<void> {
 
 	server.tool(
 		"chain_ingest_brief",
-		"Validate and persist a SessionBrief. Body may be YAML or JSON matching the SessionBrief schema (kind: session_brief).",
+		"Validate and persist a SessionBrief. Body may be YAML or JSON matching the SessionBrief schema (kind: session_brief). Idempotent on artifact id: a duplicate id refreshes the inbox file but does not append a second capture event.",
 		{ body: z.string().describe("YAML or JSON text of a SessionBrief") },
 		async ({ body }) => {
 			requireProject();
 			const parsed = parseArtifact(SessionBriefSchema, body);
-			writeFileAtomic(ic("inbox", "latest-brief.yml"), YAML.stringify(parsed));
-			const { alreadyPresent } = captureBrief(getDb(), parsed, "mcp");
+			const { alreadyPresent } = withLock(PATHS.ledgerLock(), () => {
+				writeFileAtomic(
+					ic("inbox", "latest-brief.yml"),
+					YAML.stringify(parsed),
+				);
+				return captureBrief(getDb(), parsed, "mcp");
+			});
 			const note = alreadyPresent ? " (already captured; inbox refreshed)" : "";
 			return {
 				content: [
@@ -156,6 +167,15 @@ export async function startMcpServer(): Promise<void> {
 				via: "mcp",
 			});
 
+			// Public `source` keeps the pre-v0.2-hardening enum (session|interaction).
+			// record_source exposes the MemoryEvolutionRecord source string.
+			const publicSource =
+				outcome.record.source === "session_brief"
+					? "session"
+					: outcome.record.source === "interaction_update"
+						? "interaction"
+						: outcome.record.source;
+
 			return {
 				content: [
 					{
@@ -164,7 +184,8 @@ export async function startMcpServer(): Promise<void> {
 							{
 								from: outcome.record.from_iteration,
 								to: outcome.record.to_iteration,
-								source: outcome.record.source,
+								source: publicSource,
+								record_source: outcome.record.source,
 								score_before: outcome.scoreBefore,
 								score_after: outcome.scoreAfter,
 							},
@@ -179,7 +200,7 @@ export async function startMcpServer(): Promise<void> {
 
 	server.tool(
 		"chain_verify",
-		"Replay the JSONL hash chain and cross-check against SQLite event count.",
+		"Replay the JSONL hash chain and cross-check against SQLite. `ok` is hash-chain health only; see in_sync / current_yml_ok / overall_ok for the rest.",
 		{},
 		async () => {
 			if (!existsSync(PATHS.ledgerJsonl())) {
@@ -192,7 +213,8 @@ export async function startMcpServer(): Promise<void> {
 						type: "text",
 						text: JSON.stringify(
 							{
-								ok: v.ok && v.inSync && v.currentYmlOk,
+								ok: v.ok,
+								overall_ok: v.ok && v.inSync && v.currentYmlOk,
 								total: v.total,
 								errors: v.errors,
 								sqlite_event_count: v.sqliteEventCount,

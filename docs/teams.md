@@ -79,7 +79,9 @@ Git-tracked `masterplan.md` the whole team (and their AI assistants) reads.
    PR merge. Filters lint/format noise, honors `overrides.md`, and merges real
    security/structural constraints into `bot_ledger.md`, deduplicating against
    what is already recorded (the whole file is rewritten, not appended, so the
-   ledger does not accumulate duplicates across PRs).
+   ledger does not accumulate duplicates across PRs). The Action opens a
+   **reviewable PR** with the updated ledger — it never pushes LLM output
+   straight to the default branch.
 
 ## Setup
 
@@ -93,6 +95,12 @@ export ANTHROPIC_API_KEY="sk-..."   # add to ~/.zshrc or ~/.bashrc
 In CI, add `ANTHROPIC_API_KEY` as a repository secret so the bot-distillation
 workflow can run. Each developer authors `.inference/dev_<name>.md` and commits
 it; the hook does the rest.
+
+> **Secret-equivalent paths.** The distill job runs
+> `python3 .inference/scripts/distill_bots.py` from the checked-out default
+> branch with `ANTHROPIC_API_KEY` in the environment. Require CODEOWNERS (or
+> equivalent) review on `.inference/scripts/**` and
+> `.github/workflows/ic-teams-bot-distill.yml` before merge.
 
 ## Configuration
 

@@ -156,6 +156,11 @@ resolves `.inference-chain/` from `--cwd`, so multiple Desktop projects can
 each have their own ledger — as long as each session starts in the same
 folder, the ledger is the key.
 
+`chain_evolve` returns `source` as `session` | `interaction` (plus
+`record_source` for the evolution-record enum). `chain_verify` keeps `ok`
+as hash-chain health; use `overall_ok` (and `in_sync` / `current_yml_ok`)
+for full integrity.
+
 ## Teams (shared repo)
 
 Two ways to share context across a team, both via `ic teams`:
@@ -167,8 +172,11 @@ Two ways to share context across a team, both via `ic teams`:
   Ledgers must share the same `project_id` or merge fails.
 - **LLM synthesis (opt-in):** `ic teams init` scaffolds an `.inference/`
   masterplan, a Husky pre-commit hook that distills developer ledgers via
-  Claude, and a GitHub Action that distills PR review-bot feedback. This path
-  uses model API calls and is isolated from the deterministic solo core.
+  Claude, and a GitHub Action that distills PR review-bot feedback into a
+  **reviewable PR** (never a direct push of LLM output to the default branch).
+  This path uses model API calls and is isolated from the deterministic solo
+  core. Treat merges that touch `.inference/scripts/**` or the bot-distill
+  workflow as secret-equivalent (CODEOWNERS recommended).
 
 See `docs/teams.md`, the bake-off in `docs/teams-comparison.md`, and the
 `distill` front-end design in `docs/teams-distill-scope.md`.
@@ -217,7 +225,7 @@ quarantined into an open question; `--strict` exits non-zero; divergent
 `project_id` values are rejected. Exclusive-belief e2e: promote then reject
 removes the item from stable and keeps it only under rejected.
 
-Unit/integration suite: **66 tests** green after the hardening pass.
+Unit/integration suite: **69 tests** green after the CodeFerret hardening pass.
 
 ## How the ledger stays sharp
 
@@ -258,21 +266,28 @@ brief coherent:
   recomputes the chain and exits non-zero on any tamper or broken link.
 - **Locked evolve path.** `ic evolve` (CLI + MCP) holds a re-entrant
   cross-process lock across load → resolve inbox → capture → commit →
-  archive, so two processes cannot double-apply the same inbox file or fork
-  the hash chain.
+  archive. MCP inbox writes and capture share that lock so ingest cannot
+  swap the inbox mid-evolve. Stale locks are broken only after a dead-PID
+  check via atomic rename (no TOCTOU dual-hold).
+- **Source-id idempotent evolve.** If a crash leaves the inbox after a
+  successful commit, the next `ic evolve` archives the leftover file and
+  refuses to re-apply the same source id.
 - **Atomic evolve.** Evolution record + chain state + events are written in
   one SQLite transaction; JSONL is batch-appended only after commit.
   `current.yml` is written via temp-file + rename.
 - **Content-parity verify.** `ic verify` checks JSONL↔SQLite event hashes
-  (not just counts) and that `current.yml` matches the last
-  `ledger_evolved` tip.
+  (not just counts) and that `current.yml` matches the last real
+  `ledger_evolved` tip (snapshot ingest events are ignored for that check).
 - **Canonical JSON.** Hashes use code-unit key ordering (locale-independent).
 - **Append-only.** `evolve` never rewrites prior events. The only way to
   remove history is to delete `.inference-chain/` (or `ic init --force`).
 - **Idempotent capture.** Re-ingesting the same artifact id does not append
-  a duplicate `*_captured` event.
+  a duplicate `*_captured` event (documented on the MCP ingest tools too).
 - **Absolute paths.** CLI args like `/tmp/ledgers` resolve correctly (via
   `path.resolve`, not `path.join` against cwd).
+- **Team merge exclusivity.** Deterministic merge keeps beliefs exclusive
+  across active / stable / rejected (stable wins) and stamps `updated_at`
+  from inputs so identical merges are byte-identical.
 
 ## Privacy
 **100% local.** Nothing leaves your machine. No telemetry. No model API
@@ -289,7 +304,7 @@ proposed feature fits one of those, it does not belong here.
 
 ## Development
 ```bash
-pnpm test       # 66 tests: evolve math, hash chain, verify, lock, teams, bootstrap, inbox
+pnpm test       # 69 tests: evolve math, hash chain, verify, lock, teams, bootstrap, inbox
 pnpm build
 pnpm lint
 pnpm format

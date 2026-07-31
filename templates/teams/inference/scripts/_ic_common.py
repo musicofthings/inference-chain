@@ -10,6 +10,7 @@ import datetime as _dt
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # Resolve .inference/ relative to this file (scripts/ lives inside it).
@@ -39,8 +40,19 @@ def read_text(path: Path, default: str = "") -> str:
 
 
 def write_text(path: Path, content: str) -> None:
+    """Atomic write via temp file + os.replace (avoids torn reads)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def load_prompt(name: str) -> str:

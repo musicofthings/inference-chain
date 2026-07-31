@@ -117,6 +117,7 @@ export function mergeTeamLedgers(inputs: TeamInput[]): TeamMergeResult {
 	}
 
 	// active_hypotheses: union by hypothesis, evidence merged, max confidence.
+	// Filtered against stable_learnings below (stable wins — exclusive sections).
 	const hypMap = new Map<string, ActiveHypothesis>();
 	for (const { ledger } of devs) {
 		for (const h of ledger.active_hypotheses) {
@@ -147,9 +148,6 @@ export function mergeTeamLedgers(inputs: TeamInput[]): TeamMergeResult {
 			}
 		}
 	}
-	const activeHypotheses = [...hypMap.values()].sort((a, b) =>
-		norm(a.hypothesis) < norm(b.hypothesis) ? -1 : 1,
-	);
 
 	// stable_decisions: union by decision; widen the iteration window.
 	const decMap = new Map<string, ChainLedger["stable_decisions"][number]>();
@@ -218,6 +216,10 @@ export function mergeTeamLedgers(inputs: TeamInput[]): TeamMergeResult {
 	const stableLearnings = sortedUnique(
 		devs.flatMap((d) => d.ledger.stable_learnings).filter(notConflicted),
 	);
+	const stableKeys = new Set(stableLearnings.map(norm));
+	const activeHypotheses = [...hypMap.values()]
+		.filter((h) => !stableKeys.has(norm(h.hypothesis)))
+		.sort((a, b) => (norm(a.hypothesis) < norm(b.hypothesis) ? -1 : 1));
 
 	const nextActions = sortedUnique(
 		devs.flatMap((d) => d.ledger.current_frontier.next_best_action),
@@ -245,7 +247,10 @@ export function mergeTeamLedgers(inputs: TeamInput[]): TeamMergeResult {
 		schema_version: "1.0.0",
 		project_id: devs[0].ledger.project_id,
 		iteration: Math.max(...devs.map((d) => d.ledger.iteration)),
-		updated_at: new Date().toISOString(),
+		// Deterministic: max lexicographic updated_at among inputs (not wall clock).
+		updated_at: [...devs.map((d) => d.ledger.updated_at)]
+			.sort()
+			.reduce((a, b) => (a > b ? a : b)),
 		global_objective: devs[0].ledger.global_objective,
 		current_operating_model: model,
 		stable_learnings: stableLearnings,

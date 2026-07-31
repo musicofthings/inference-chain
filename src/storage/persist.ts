@@ -113,25 +113,27 @@ export function captureUpdate(
 	parsed: InteractionUpdate,
 	via?: string,
 ): CaptureResult {
-	if (hasUpdate(db, parsed.id)) return { alreadyPresent: true };
-	insertUpdate(db, {
-		id: parsed.id,
-		projectId: parsed.project_id,
-		iteration: parsed.iteration,
-		yaml: YAML.stringify(parsed),
-		createdAt: new Date().toISOString(),
-	});
-	appendChainEvent(db, {
-		projectId: parsed.project_id,
-		iteration: parsed.iteration,
-		type: "interaction_update_captured",
-		payload: {
+	return withLock(PATHS.ledgerLock(), () => {
+		if (hasUpdate(db, parsed.id)) return { alreadyPresent: true };
+		insertUpdate(db, {
 			id: parsed.id,
-			trigger: parsed.trigger,
-			...(via ? { via } : {}),
-		},
+			projectId: parsed.project_id,
+			iteration: parsed.iteration,
+			yaml: YAML.stringify(parsed),
+			createdAt: new Date().toISOString(),
+		});
+		appendChainEvent(db, {
+			projectId: parsed.project_id,
+			iteration: parsed.iteration,
+			type: "interaction_update_captured",
+			payload: {
+				id: parsed.id,
+				trigger: parsed.trigger,
+				...(via ? { via } : {}),
+			},
+		});
+		return { alreadyPresent: false };
 	});
-	return { alreadyPresent: false };
 }
 
 /** Persist a SessionBrief if not yet captured. Idempotent on id. */
@@ -140,25 +142,27 @@ export function captureBrief(
 	parsed: SessionBrief,
 	via?: string,
 ): CaptureResult {
-	if (hasBrief(db, parsed.id)) return { alreadyPresent: true };
-	insertBrief(db, {
-		id: parsed.id,
-		projectId: parsed.project_id,
-		iteration: parsed.iteration,
-		yaml: YAML.stringify(parsed),
-		createdAt: new Date().toISOString(),
-	});
-	appendChainEvent(db, {
-		projectId: parsed.project_id,
-		iteration: parsed.iteration,
-		type: "session_brief_captured",
-		payload: {
+	return withLock(PATHS.ledgerLock(), () => {
+		if (hasBrief(db, parsed.id)) return { alreadyPresent: true };
+		insertBrief(db, {
 			id: parsed.id,
-			primary_goal: parsed.session_intent.primary_goal,
-			...(via ? { via } : {}),
-		},
+			projectId: parsed.project_id,
+			iteration: parsed.iteration,
+			yaml: YAML.stringify(parsed),
+			createdAt: new Date().toISOString(),
+		});
+		appendChainEvent(db, {
+			projectId: parsed.project_id,
+			iteration: parsed.iteration,
+			type: "session_brief_captured",
+			payload: {
+				id: parsed.id,
+				primary_goal: parsed.session_intent.primary_goal,
+				...(via ? { via } : {}),
+			},
+		});
+		return { alreadyPresent: false };
 	});
-	return { alreadyPresent: false };
 }
 
 export type EvolutionInputs = {
@@ -250,6 +254,21 @@ export function runEvolution(inputs: EvolutionInputs): EvolutionOutcome {
 	// concurrent process cannot read the same parent event and fork the chain.
 	// Archive is inside the lock so the inbox cannot be double-applied.
 	const events = withLock(PATHS.ledgerLock(), () => {
+		// Crash after commit but before archive leaves the inbox in place.
+		// Refuse to re-apply the same sourceId; just clean up the leftover file.
+		const prior = readEvents(PATHS.ledgerJsonl());
+		const alreadyApplied = prior.some(
+			(e) =>
+				e.type === "memory_evolution_created" &&
+				(e.payload as { from?: string }).from === inputs.sourceId,
+		);
+		if (alreadyApplied) {
+			inputs.archiveInbox();
+			throw new Error(
+				`Source ${inputs.sourceId} was already evolved; archived leftover inbox without re-applying.`,
+			);
+		}
+
 		const prev = lastEvent(PATHS.ledgerJsonl());
 		const built = buildEventChain(prev, drafts);
 
@@ -434,9 +453,16 @@ export function verifyLedger(db: DB): LedgerVerification {
 			const current = ChainLedgerSchema.parse(
 				YAML.parse(readFileSync(PATHS.currentYml(), "utf8")),
 			);
-			const lastEvolved = [...events]
-				.reverse()
-				.find((e) => e.type === "ledger_evolved");
+			// Skip snapshot ingest events — they reuse ledger_evolved without
+			// updating current.yml and must not fail the tip check.
+			let lastEvolved: (typeof events)[number] | undefined;
+			for (let i = events.length - 1; i >= 0; i--) {
+				const e = events[i];
+				if (e.type !== "ledger_evolved") continue;
+				if ((e.payload as { source?: string }).source === "snapshot") continue;
+				lastEvolved = e;
+				break;
+			}
 			if (lastEvolved) {
 				if (lastEvolved.projectId !== current.project_id) {
 					currentYmlErrors.push(

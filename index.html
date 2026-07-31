@@ -102,7 +102,7 @@
 <div class="wrap">
 
 <header>
-  <div class="chip">v0.2.0 · Apache-2.0 · local-first · n+1 POSITIVE</div>
+  <div class="chip">v0.2.0 · Apache-2.0 · local-first · n+1 POSITIVE · CodeFerret-hardened</div>
   <h1>Inference <span class="ac">Chain</span></h1>
   <p class="tagline">A forward-only <code>n+1</code> inference ledger for Claude Code. Every session continues sharper than the last.</p>
   <p style="margin-top: 24px;">
@@ -215,10 +215,10 @@ ic resume</code></pre>
   <h2>Integrity guarantees</h2>
   <div class="grid">
     <div class="card"><h4>hash chain</h4><p>Every event carries <code>parentHash</code> + <code>sha256(canonicalJson(event))</code>. <code>ic verify</code> exits non-zero on any tamper.</p></div>
-    <div class="card"><h4>locked evolve path</h4><p>One re-entrant lock covers load → resolve inbox → capture → commit → archive, so CLI + MCP cannot double-apply or fork the chain.</p></div>
-    <div class="card"><h4>content-parity verify</h4><p>Cross-checks every event hash between JSONL and SQLite, and that <code>current.yml</code> matches the last evolved tip.</p></div>
+    <div class="card"><h4>locked evolve path</h4><p>One re-entrant lock covers load → resolve inbox → capture → commit → archive. MCP ingest shares it; stale locks break only after a dead-PID check via atomic rename.</p></div>
+    <div class="card"><h4>source-id idempotent</h4><p>A crash that leaves the inbox after commit cannot double-apply — the next evolve archives the leftover and refuses the same source id.</p></div>
+    <div class="card"><h4>content-parity verify</h4><p>Cross-checks every event hash between JSONL and SQLite, and that <code>current.yml</code> matches the last real evolved tip (snapshot ingest ignored).</p></div>
     <div class="card"><h4>atomic writes</h4><p>SQLite transaction first; JSONL batch-append after commit; <code>current.yml</code> via temp-file + rename.</p></div>
-    <div class="card"><h4>locale-independent</h4><p>Canonical JSON sorts keys by code unit, so two machines hashing the same event produce identical bytes.</p></div>
     <div class="card"><h4>append-only</h4><p>No rewrite path. The only way to drop history is to delete <code>.inference-chain/</code> or re-init with <code>--force</code>.</p></div>
   </div>
 </section>
@@ -233,10 +233,10 @@ ic resume</code></pre>
     default: it is reproducible, hash-verifiable, free, and offline.
   </p>
   <div class="grid">
-    <div class="card"><h4>deterministic merge</h4><p>Per-developer ledgers union into a shared team ledger — order-independent and byte-reproducible, so it hash-verifies like the solo core.</p></div>
+    <div class="card"><h4>deterministic merge</h4><p>Per-developer ledgers union into a shared team ledger — order-independent and byte-reproducible (stable wins over active; <code>updated_at</code> derived from inputs).</p></div>
     <div class="card"><h4>conflict detection</h4><p>A belief asserted by one dev and rejected by another is quarantined into an open question, never silently resolved. <code>--strict</code> fails CI on conflicts.</p></div>
     <div class="card"><h4>project_id guard</h4><p>Ledgers with different <code>project_id</code> values refuse to merge — no silent identity drift.</p></div>
-    <div class="card"><h4>LLM at the edge</h4><p>Optional hooks distill sessions and review-bot feedback; the merge that decides shared truth stays deterministic.</p></div>
+    <div class="card"><h4>LLM at the edge</h4><p>Optional hooks distill sessions and review-bot feedback into a <strong>reviewable PR</strong> — never a direct push of LLM output to the default branch.</p></div>
   </div>
   <p class="small">See <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams-comparison.md">the full comparison</a> and <a href="https://github.com/musicofthings/inference-chain/blob/main/docs/teams.md">teams docs</a>.</p>
   <pre><code>ic teams init
@@ -255,7 +255,7 @@ ic teams sync ./ledgers</code></pre>
     }
   }
 }</code></pre>
-  <p class="small">Exposes six MCP tools: <code>chain_status</code>, <code>chain_resume_brief</code>, <code>chain_ingest_update</code>, <code>chain_ingest_brief</code>, <code>chain_evolve</code>, <code>chain_verify</code>. As long as each session starts in the same folder, the ledger is the key.</p>
+  <p class="small">Exposes six MCP tools: <code>chain_status</code>, <code>chain_resume_brief</code>, <code>chain_ingest_update</code>, <code>chain_ingest_brief</code>, <code>chain_evolve</code>, <code>chain_verify</code>. <code>chain_verify.ok</code> is hash-chain health; use <code>overall_ok</code> for full integrity. As long as each session starts in the same folder, the ledger is the key.</p>
 </section>
 
 <section>
