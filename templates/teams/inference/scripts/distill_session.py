@@ -10,6 +10,7 @@ The authoritative schema check lives in the TS core — run `ic teams validate
 <file>` (or `ic teams merge`) afterward. This script does a light structural
 pre-check and refuses to write on empty/garbled model output.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,12 +31,22 @@ from _ic_common import (
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Distill a session log into dev_<author>.yml.")
-    ap.add_argument("--author", required=True, help="Developer name (used for dev_<author>.yml).")
+    ap = argparse.ArgumentParser(
+        description="Distill a session log into dev_<author>.yml."
+    )
+    ap.add_argument(
+        "--author", required=True, help="Developer name (used for dev_<author>.yml)."
+    )
     ap.add_argument("--project", required=True, help="project_id for the ledger.")
-    ap.add_argument("--log", type=Path, help="Raw session log file. If omitted, reads stdin.")
-    ap.add_argument("--iteration", type=int, help="Iteration number (default: prev dev ledger + 1).")
-    ap.add_argument("--out", type=Path, help="Output path (default .inference/dev_<author>.yml).")
+    ap.add_argument(
+        "--log", type=Path, help="Raw session log file. If omitted, reads stdin."
+    )
+    ap.add_argument(
+        "--iteration", type=int, help="Iteration number (default: prev dev ledger + 1)."
+    )
+    ap.add_argument(
+        "--out", type=Path, help="Output path (default .inference/dev_<author>.yml)."
+    )
     return ap.parse_args()
 
 

@@ -1,42 +1,46 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import YAML from 'yaml';
-import { renderResumeBrief } from '../core/resume.js';
-import { ZodError } from 'zod';
-import { type ChainLedger, ChainLedgerSchema } from '../core/schemas.js';
-import { type TeamInput, type TeamMergeResult, mergeTeamLedgers } from './merge.js';
+import { readFileSync, readdirSync } from "node:fs";
+import { basename, join } from "node:path";
+import YAML from "yaml";
+import { ZodError } from "zod";
+import { renderResumeBrief } from "../core/resume.js";
+import { type ChainLedger, ChainLedgerSchema } from "../core/schemas.js";
+import {
+	type TeamInput,
+	type TeamMergeResult,
+	mergeTeamLedgers,
+} from "./merge.js";
 
 export type DirMergeResult = {
-  result: TeamMergeResult;
-  teamYaml: string;
-  resume: string;
-  authors: string[];
+	result: TeamMergeResult;
+	teamYaml: string;
+	resume: string;
+	authors: string[];
 };
 
 const DEV_FILE = /^dev[-_](.+)\.ya?ml$/i;
 
 /** author name from a `dev_<name>.yml` filename. */
 function authorOf(file: string): string {
-  const m = basename(file).match(DEV_FILE);
-  return m ? m[1] : basename(file).replace(/\.ya?ml$/i, '');
+	const m = basename(file).match(DEV_FILE);
+	return m ? m[1] : basename(file).replace(/\.ya?ml$/i, "");
 }
 
 /** Parse + schema-validate one developer ledger; errors name the file. */
 export function loadDevLedger(path: string): ChainLedger {
-  try {
-    return ChainLedgerSchema.parse(YAML.parse(readFileSync(path, 'utf8')));
-  } catch (err) {
-    // Surface a single actionable line naming the file and the first concrete
-    // problem, not a raw multi-line ZodError dump.
-    let reason: string;
-    if (err instanceof ZodError) {
-      const i = err.issues[0];
-      reason = `${i.path.join('.') || '(root)'}: ${i.message}`;
-    } else {
-      reason = err instanceof Error ? err.message.split('\n')[0] : String(err);
-    }
-    throw new Error(`Invalid developer ledger ${basename(path)}: ${reason}`);
-  }
+	try {
+		return ChainLedgerSchema.parse(YAML.parse(readFileSync(path, "utf8")));
+	} catch (err) {
+		// Surface a single actionable line naming the file and the first concrete
+		// problem, not a raw multi-line ZodError dump.
+		let reason: string;
+		if (err instanceof ZodError) {
+			const i = err.issues[0];
+			reason = `${i.path.join(".") || "(root)"}: ${i.message}`;
+		} else {
+			reason = err instanceof Error ? err.message.split("\n")[0] : String(err);
+		}
+		throw new Error(`Invalid developer ledger ${basename(path)}: ${reason}`);
+	}
 }
 
 /**
@@ -46,25 +50,25 @@ export function loadDevLedger(path: string): ChainLedger {
  * rendered team resume brief, ready for the CLI to write/print.
  */
 export function mergeTeamLedgersFromDir(dir: string): DirMergeResult {
-  const files = readdirSync(dir)
-    .filter((f) => DEV_FILE.test(f))
-    .sort();
-  if (files.length === 0) {
-    throw new Error(
-      `No developer ledgers found in ${dir}. Expected files named dev_<name>.yml.`,
-    );
-  }
+	const files = readdirSync(dir)
+		.filter((f) => DEV_FILE.test(f))
+		.sort();
+	if (files.length === 0) {
+		throw new Error(
+			`No developer ledgers found in ${dir}. Expected files named dev_<name>.yml.`,
+		);
+	}
 
-  const inputs: TeamInput[] = files.map((f) => ({
-    author: authorOf(f),
-    ledger: loadDevLedger(join(dir, f)),
-  }));
+	const inputs: TeamInput[] = files.map((f) => ({
+		author: authorOf(f),
+		ledger: loadDevLedger(join(dir, f)),
+	}));
 
-  const result = mergeTeamLedgers(inputs);
-  return {
-    result,
-    teamYaml: YAML.stringify(result.teamLedger),
-    resume: renderResumeBrief(result.teamLedger),
-    authors: inputs.map((i) => i.author),
-  };
+	const result = mergeTeamLedgers(inputs);
+	return {
+		result,
+		teamYaml: YAML.stringify(result.teamLedger),
+		resume: renderResumeBrief(result.teamLedger),
+		authors: inputs.map((i) => i.author),
+	};
 }

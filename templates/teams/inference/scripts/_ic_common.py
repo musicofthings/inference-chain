@@ -4,6 +4,7 @@ Kept dependency-light: only the `anthropic` SDK plus the stdlib. Both
 engines (local_merge.py, distill_bots.py) import from here so the model
 config, prompt loading, and frontmatter handling stay in one place.
 """
+
 from __future__ import annotations
 
 import datetime as _dt

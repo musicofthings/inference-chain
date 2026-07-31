@@ -10,3 +10,8 @@ Thumbs.db
 # Python bytecode (teams-mode synthesis engines)
 __pycache__/
 *.pyc
+
+# Local agent / review session state (not product code)
+.claude/
+.ferret/
+session_handover.md

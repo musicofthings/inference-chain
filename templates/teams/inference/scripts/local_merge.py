@@ -6,6 +6,7 @@ this commit, merges them into masterplan.md via Claude, offloads stale nodes
 to archive.md, and aborts the commit (exit 1) when an unresolvable conflict
 is detected so a human can resolve the `> [!WARNING] CONFLICT:` block.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -52,11 +53,7 @@ def staged_dev_ledgers() -> list[Path]:
 
     # Fallback for non-git / manual runs: glob the dev ledgers on disk.
     if not staged:
-        staged = [
-            p
-            for p in INFERENCE_DIR.glob("dev_*.md")
-            if p.name not in RESERVED
-        ]
+        staged = [p for p in INFERENCE_DIR.glob("dev_*.md") if p.name not in RESERVED]
     return sorted(set(staged))
 
 
@@ -66,9 +63,7 @@ def main() -> int:
         # Nothing developer-authored to merge; let the commit proceed.
         return 0
 
-    bundle = "\n\n".join(
-        f"<!-- ledger: {p.name} -->\n{read_text(p)}" for p in ledgers
-    )
+    bundle = "\n\n".join(f"<!-- ledger: {p.name} -->\n{read_text(p)}" for p in ledgers)
     current = read_text(MASTERPLAN, default="(masterplan.md is empty)")
 
     user = fill(
@@ -86,7 +81,9 @@ def main() -> int:
     report = extract_tag(response, "synthesis_report") or "(no report)"
 
     if not updated:
-        die("Synthesizer returned no <updated_masterplan>. Aborting to avoid corrupting state.")
+        die(
+            "Synthesizer returned no <updated_masterplan>. Aborting to avoid corrupting state."
+        )
 
     write_text(MASTERPLAN, updated.rstrip() + "\n")
 
@@ -95,9 +92,7 @@ def main() -> int:
         ARCHIVE.parent.mkdir(parents=True, exist_ok=True)
         prefix = "\n" if ARCHIVE.exists() and ARCHIVE.stat().st_size > 0 else ""
         with ARCHIVE.open("a", encoding="utf-8") as fh:
-            fh.write(
-                f"{prefix}<!-- archived {today()} -->\n{archive_block.rstrip()}\n"
-            )
+            fh.write(f"{prefix}<!-- archived {today()} -->\n{archive_block.rstrip()}\n")
 
     print(f"[inference-chain/teams] {report}")
 

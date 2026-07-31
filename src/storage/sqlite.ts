@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3';
-import type { LedgerEvent } from '../core/events.js';
-import type { ChainLedger } from '../core/schemas.js';
+import Database from "better-sqlite3";
+import type { LedgerEvent } from "../core/events.js";
+import type { ChainLedger } from "../core/schemas.js";
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -54,118 +54,132 @@ CREATE TABLE IF NOT EXISTS chain_state (
 export type DB = Database.Database;
 
 export function openDb(path: string): DB {
-  const db = new Database(path);
-  db.pragma('journal_mode = WAL');
-  // A long-lived `ic mcp` server and short-lived CLI / hook invocations can
-  // write concurrently. Without a busy timeout, a contended write throws
-  // SQLITE_BUSY immediately; this makes the loser wait for the lock instead.
-  db.pragma('busy_timeout = 5000');
-  db.exec(SCHEMA_SQL);
-  return db;
+	const db = new Database(path);
+	db.pragma("journal_mode = WAL");
+	// A long-lived `ic mcp` server and short-lived CLI / hook invocations can
+	// write concurrently. Without a busy timeout, a contended write throws
+	// SQLITE_BUSY immediately; this makes the loser wait for the lock instead.
+	db.pragma("busy_timeout = 5000");
+	db.exec(SCHEMA_SQL);
+	return db;
 }
 
 export function hasEvent(db: DB, id: string): boolean {
-  return db.prepare('SELECT 1 FROM events WHERE id = ?').get(id) !== undefined;
+	return db.prepare("SELECT 1 FROM events WHERE id = ?").get(id) !== undefined;
 }
 
 export function eventHashes(db: DB): Map<string, string> {
-  const rows = db.prepare('SELECT id, hash FROM events').all() as {
-    id: string;
-    hash: string;
-  }[];
-  return new Map(rows.map((r) => [r.id, r.hash]));
+	const rows = db.prepare("SELECT id, hash FROM events").all() as {
+		id: string;
+		hash: string;
+	}[];
+	return new Map(rows.map((r) => [r.id, r.hash]));
 }
 
 export function hasUpdate(db: DB, id: string): boolean {
-  return (
-    db.prepare('SELECT 1 FROM interaction_updates WHERE id = ?').get(id) !==
-    undefined
-  );
+	return (
+		db.prepare("SELECT 1 FROM interaction_updates WHERE id = ?").get(id) !==
+		undefined
+	);
 }
 
 export function hasBrief(db: DB, id: string): boolean {
-  return db.prepare('SELECT 1 FROM briefs WHERE id = ?').get(id) !== undefined;
+	return db.prepare("SELECT 1 FROM briefs WHERE id = ?").get(id) !== undefined;
 }
 
 export function insertEvent(db: DB, event: LedgerEvent): void {
-  db.prepare(
-    `INSERT INTO events
+	db.prepare(
+		`INSERT INTO events
      (id, project_id, iteration, type, timestamp, parent_event_id, parent_hash, hash, payload_json, schema_version)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    event.id,
-    event.projectId,
-    event.iteration,
-    event.type,
-    event.timestamp,
-    event.parentEventId,
-    event.parentHash,
-    event.hash,
-    JSON.stringify(event.payload),
-    event.schemaVersion,
-  );
+	).run(
+		event.id,
+		event.projectId,
+		event.iteration,
+		event.type,
+		event.timestamp,
+		event.parentEventId,
+		event.parentHash,
+		event.hash,
+		JSON.stringify(event.payload),
+		event.schemaVersion,
+	);
 }
 
 export function eventCount(db: DB): number {
-  const row = db.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number };
-  return row.n;
+	const row = db.prepare("SELECT COUNT(*) AS n FROM events").get() as {
+		n: number;
+	};
+	return row.n;
 }
 
 export function insertBrief(
-  db: DB,
-  args: { id: string; projectId: string; iteration: number; yaml: string; createdAt: string },
+	db: DB,
+	args: {
+		id: string;
+		projectId: string;
+		iteration: number;
+		yaml: string;
+		createdAt: string;
+	},
 ): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO briefs (id, project_id, iteration, brief_yaml, created_at)
+	db.prepare(
+		`INSERT OR REPLACE INTO briefs (id, project_id, iteration, brief_yaml, created_at)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(args.id, args.projectId, args.iteration, args.yaml, args.createdAt);
+	).run(args.id, args.projectId, args.iteration, args.yaml, args.createdAt);
 }
 
 export function insertUpdate(
-  db: DB,
-  args: { id: string; projectId: string; iteration: number; yaml: string; createdAt: string },
+	db: DB,
+	args: {
+		id: string;
+		projectId: string;
+		iteration: number;
+		yaml: string;
+		createdAt: string;
+	},
 ): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO interaction_updates (id, project_id, iteration, update_yaml, created_at)
+	db.prepare(
+		`INSERT OR REPLACE INTO interaction_updates (id, project_id, iteration, update_yaml, created_at)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(args.id, args.projectId, args.iteration, args.yaml, args.createdAt);
+	).run(args.id, args.projectId, args.iteration, args.yaml, args.createdAt);
 }
 
 export function insertEvolution(
-  db: DB,
-  args: {
-    id: string;
-    projectId: string;
-    fromIteration: number;
-    toIteration: number;
-    yaml: string;
-    createdAt: string;
-  },
+	db: DB,
+	args: {
+		id: string;
+		projectId: string;
+		fromIteration: number;
+		toIteration: number;
+		yaml: string;
+		createdAt: string;
+	},
 ): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO evolutions (id, project_id, from_iteration, to_iteration, evolution_yaml, created_at)
+	db.prepare(
+		`INSERT OR REPLACE INTO evolutions (id, project_id, from_iteration, to_iteration, evolution_yaml, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    args.id,
-    args.projectId,
-    args.fromIteration,
-    args.toIteration,
-    args.yaml,
-    args.createdAt,
-  );
+	).run(
+		args.id,
+		args.projectId,
+		args.fromIteration,
+		args.toIteration,
+		args.yaml,
+		args.createdAt,
+	);
 }
 
 export function upsertChainState(
-  db: DB,
-  ledger: ChainLedger,
-  ledgerYaml: string,
+	db: DB,
+	ledger: ChainLedger,
+	ledgerYaml: string,
 ): void {
-  db.prepare(
-    `INSERT INTO chain_state (project_id, current_iteration, current_ledger_yaml, updated_at)
+	db.prepare(
+		`INSERT INTO chain_state (project_id, current_iteration, current_ledger_yaml, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(project_id) DO UPDATE SET
        current_iteration = excluded.current_iteration,
        current_ledger_yaml = excluded.current_ledger_yaml,
        updated_at = excluded.updated_at`,
-  ).run(ledger.project_id, ledger.iteration, ledgerYaml, ledger.updated_at);
+	).run(ledger.project_id, ledger.iteration, ledgerYaml, ledger.updated_at);
 }

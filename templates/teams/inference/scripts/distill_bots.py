@@ -10,6 +10,7 @@ self-deduplicates across runs/PRs — the same approach the masterplan merge use
 Raw comments are provided by the workflow either as a file (--comments-file)
 or on stdin.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,9 @@ def _distill_locked(raw: str) -> int:
 
     # Never let a bad/empty model response wipe the ledger.
     if not updated:
-        die("Distiller returned no <updated_bot_ledger>; leaving bot_ledger.md unchanged.")
+        die(
+            "Distiller returned no <updated_bot_ledger>; leaving bot_ledger.md unchanged."
+        )
 
     if updated.rstrip() == existing.rstrip():
         print("[inference-chain/teams] No new constraints; bot_ledger.md unchanged.")
