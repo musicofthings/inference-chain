@@ -1,6 +1,6 @@
 ---
-description: Capture an Inference Chain interaction-level checkpoint (small memory-evolution event).
-allowed-tools: Write, Read
+name: ic-checkpoint
+description: Capture an Inference Chain interaction-level checkpoint.
 ---
 
 # /ic-checkpoint — Inference Chain Checkpoint

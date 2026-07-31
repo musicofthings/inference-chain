@@ -1,6 +1,6 @@
 ---
-description: Capture an Inference Chain session-level handoff (final Session Brief).
-allowed-tools: Write, Read
+name: ic-stop
+description: Capture an Inference Chain session-level Session Brief.
 ---
 
 # /ic-stop — Inference Chain Stop Brief

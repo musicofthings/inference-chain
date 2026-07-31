@@ -67,10 +67,11 @@ pnpm link --global
 
 cd /path/to/your/project
 ic init --project-name "My Project"
-ic install-claude
+ic install --target claude   # or: codex | gemini | grok | cursor | openhands
+# alias: ic install-claude
 ```
 
-`ic install-claude` will:
+`ic install --target claude` will:
 1. Copy slash commands to `.claude/commands/ic-*.md` (skips files that
    already exist unless `--overwrite`).
 2. Merge `SessionStart` / `PreCompact` / `Stop` hooks into
@@ -78,6 +79,9 @@ ic install-claude
 3. Drop a Claude Code Plugin scaffold into
    `.claude/plugins/inference-chain/` so the project can be enabled with
    `/plugin` if your Claude Code version supports plugins.
+
+Other targets install the equivalent host pack (commands, hooks, skills,
+`AGENTS.md`, and project MCP for `ic mcp`). See [docs/agents.md](docs/agents.md).
 
 Re-init is refused unless you pass `--force` (wipes `.inference-chain/`):
 
@@ -123,7 +127,8 @@ frontier without rediscovering rejected hypotheses.
 | ------------------------------- | --------------------------------------------------------- |
 | `ic init --project-name`        | Initialize `.inference-chain/`, SQLite, JSONL, templates  |
 | `ic init --force`               | Wipe an existing project and re-initialize                |
-| `ic install-claude`             | Install slash commands, merge hooks, install plugin scaffold |
+| `ic install --target <agent>`   | Install host adapter (`claude\|codex\|gemini\|grok\|cursor\|openhands`) |
+| `ic install-claude`             | Alias for `ic install --target claude` |
 | `ic ingest <file>`              | Validate + store an artifact (routes by `kind`; idempotent on id) |
 | `ic evolve [--advance]`         | Apply latest brief/update under the ledger lock           |
 | `ic resume [--silent]`          | Generate `resumes/resume_latest.md`                        |

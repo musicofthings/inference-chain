@@ -1,5 +1,5 @@
 ---
-description: Resume a Claude Code session from the latest Inference Chain resume brief.
+description: Resume a coding-agent session from the latest Inference Chain resume brief.
 allowed-tools: Read
 ---
 

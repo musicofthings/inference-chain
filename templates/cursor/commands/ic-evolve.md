@@ -1,6 +1,5 @@
 ---
-description: Produce a Memory Evolution Record reconciling current ledger with latest brief/update.
-allowed-tools: Write, Read
+description: Produce a Memory Evolution Record for the ledger.
 ---
 
 # /ic-evolve — Inference Chain Evolve Ledger

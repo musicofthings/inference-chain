@@ -1,75 +1,14 @@
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { TEMPLATE, templatesRoot } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
+import { copyOne, copyTree } from "../shared/fs.js";
+import { mergeJsonKeyAbsent } from "../shared/merge.js";
+import { writeNeutralPrompts } from "../shared/prompts.js";
+import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-/**
- * Install Claude Code integration into the current working directory.
- *
- * Strategy:
- *   1. Copy slash command markdown from templates/claude/commands/ into
- *      .claude/commands/ (skipping any user file that already exists unless
- *      overwrite is true).
- *   2. Merge a small hook block into .claude/settings.json without
- *      clobbering existing keys.
- *   3. If a Claude Code Plugin manifest exists in templates/plugin/, copy
- *      it to .claude/plugins/inference-chain/ as well so the project can be
- *      consumed as a plugin.
- */
-export function installClaude(opts: { overwrite?: boolean } = {}): {
-	installedCommands: string[];
-	settingsPath: string;
-	pluginInstalled: boolean;
-} {
-	const overwrite = opts.overwrite ?? false;
-	mkdirSync(p(".claude", "commands"), { recursive: true });
-
-	const cmdsSrc = join(templatesRoot(), "claude", "commands");
-	const installed: string[] = [];
-	for (const file of readdirSync(cmdsSrc)) {
-		if (!file.endsWith(".md")) continue;
-		const dest = p(".claude", "commands", file);
-		if (existsSync(dest) && !overwrite) continue;
-		copyFileSync(join(cmdsSrc, file), dest);
-		installed.push(file);
-	}
-
-	const settingsPath = p(".claude", "settings.json");
-	mergeSettings(settingsPath);
-
-	const pluginInstalled = installPlugin(overwrite);
-
-	return { installedCommands: installed, settingsPath, pluginInstalled };
-}
-
-function mergeSettings(settingsPath: string): void {
-	let existing: Record<string, unknown> = {};
-	if (existsSync(settingsPath)) {
-		try {
-			existing = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<
-				string,
-				unknown
-			>;
-		} catch (err) {
-			// Leave a broken settings file alone — refuse to overwrite human
-			// edits — but make the skip visible so users can fix the JSON.
-			const msg = err instanceof Error ? err.message : String(err);
-			console.error(
-				`[inference-chain] WARN: ${settingsPath} is not valid JSON (${msg}). Skipping hook merge. Fix the file and re-run "ic install-claude".`,
-			);
-			return;
-		}
-	}
-
-	const hooks = (existing.hooks as Record<string, unknown> | undefined) ?? {};
-	const desiredHooks: Record<string, unknown> = {
+function desiredClaudeHooks(): Record<string, unknown> {
+	return {
 		SessionStart: [
 			{
 				hooks: [
@@ -104,33 +43,75 @@ function mergeSettings(settingsPath: string): void {
 			},
 		],
 	};
-
-	for (const key of Object.keys(desiredHooks)) {
-		if (!(key in hooks)) hooks[key] = desiredHooks[key];
-	}
-	existing.hooks = hooks;
-
-	writeFileSync(settingsPath, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
 }
 
-function installPlugin(overwrite: boolean): boolean {
-	const pluginSrc = TEMPLATE.pluginRoot();
-	if (!existsSync(pluginSrc)) return false;
-	const dest = p(".claude", "plugins", "inference-chain");
-	copyTree(pluginSrc, dest, overwrite);
-	return true;
-}
+export function installClaude(
+	opts: { overwrite?: boolean; withMcp?: boolean } = {},
+): InstallResult & {
+	installedCommands: string[];
+	settingsPath: string;
+	pluginInstalled: boolean;
+} {
+	const overwrite = opts.overwrite ?? false;
+	const installed: string[] = [];
+	const notes: string[] = [];
 
-function copyTree(src: string, dest: string, overwrite: boolean): void {
-	mkdirSync(dest, { recursive: true });
-	for (const entry of readdirSync(src, { withFileTypes: true })) {
-		const s = join(src, entry.name);
-		const d = join(dest, entry.name);
-		if (entry.isDirectory()) {
-			copyTree(s, d, overwrite);
-		} else if (entry.isFile()) {
-			if (existsSync(d) && !overwrite) continue;
-			copyFileSync(s, d);
+	writeNeutralPrompts({ overwrite, installed });
+
+	const cmdsSrc = join(templatesRoot(), "claude", "commands");
+	const installedCommands: string[] = [];
+	if (existsSync(cmdsSrc)) {
+		for (const file of readdirSync(cmdsSrc)) {
+			if (!file.endsWith(".md")) continue;
+			const dest = p(".claude", "commands", file);
+			if (
+				copyOne(join(cmdsSrc, file), dest, overwrite, installed, process.cwd())
+			) {
+				installedCommands.push(file);
+			}
 		}
 	}
+
+	const settingsPath = p(".claude", "settings.json");
+	const hooksMerged = mergeJsonKeyAbsent(
+		settingsPath,
+		{ hooks: desiredClaudeHooks() },
+		{ overwrite: false, warnLabel: settingsPath },
+	);
+	if (hooksMerged) installed.push(".claude/settings.json");
+
+	const pluginSrc = TEMPLATE.pluginRoot();
+	let pluginInstalled = false;
+	if (existsSync(pluginSrc)) {
+		const dest = p(".claude", "plugins", "inference-chain");
+		copyTree(pluginSrc, dest, overwrite, installed, process.cwd());
+		pluginInstalled = true;
+	}
+
+	if (opts.withMcp) {
+		notes.push(
+			"Claude Code MCP: add `ic mcp --cwd <project>` via your Claude MCP settings if desired (slash commands cover the common loop).",
+		);
+	}
+
+	return {
+		target: "claude",
+		installed,
+		notes,
+		installedCommands,
+		settingsPath,
+		pluginInstalled,
+	};
 }
+
+export const claudeAdapter: AgentAdapter = {
+	id: "claude",
+	install(opts: InstallOpts): InstallResult {
+		const res = installClaude(opts);
+		return {
+			target: res.target,
+			installed: res.installed,
+			notes: res.notes,
+		};
+	},
+};

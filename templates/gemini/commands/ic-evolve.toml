@@ -1,8 +1,6 @@
----
-description: Produce a Memory Evolution Record reconciling current ledger with latest brief/update.
-allowed-tools: Write, Read
----
+description = "Produce a Memory Evolution Record for the ledger."
 
+prompt = """
 # /ic-evolve — Inference Chain Evolve Ledger
 
 Use the **latest Session Brief or Interaction Update** plus the **current
@@ -67,3 +65,5 @@ Run:
 > Note: `ic evolve` (with no flags) is the deterministic merge path and is
 > what normal usage runs. `/ic-evolve` is for cases where deeper reasoning
 > over the ledger is needed before persisting.
+
+"""

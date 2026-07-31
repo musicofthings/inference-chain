@@ -15,6 +15,11 @@ import {
 	SessionBriefSchema,
 } from "./core/schemas.js";
 import { installClaude } from "./integrations/claude/install.js";
+import {
+	AGENT_TARGETS,
+	installAgent,
+	isAgentTarget,
+} from "./integrations/registry.js";
 import { installTeams } from "./integrations/teams/install.js";
 import { writeFileAtomic } from "./storage/atomicWrite.js";
 import { TEMPLATE } from "./storage/packageAssets.js";
@@ -86,24 +91,94 @@ program
 		},
 	);
 
-program
-	.command("install-claude")
-	.option("--overwrite", "Overwrite existing .claude files")
-	.action((opts: { overwrite?: boolean }) => {
-		const res = installClaude({ overwrite: opts.overwrite });
+function printInstallResult(
+	target: string,
+	res: {
+		installed: string[];
+		notes: string[];
+		installedCommands?: string[];
+		settingsPath?: string;
+		pluginInstalled?: boolean;
+	},
+): void {
+	console.log(`Installed Inference Chain adapter: ${target}`);
+	if (res.installedCommands) {
 		console.log(
-			`Installed Claude commands: ${
+			`Commands: ${
 				res.installedCommands.length
 					? res.installedCommands.join(", ")
 					: "(none; existing files preserved)"
 			}`,
 		);
+	}
+	if (res.settingsPath) {
 		console.log(`Merged hook config into ${res.settingsPath}`);
-		if (res.pluginInstalled) {
-			console.log(
-				"Installed Claude Code Plugin scaffold at .claude/plugins/inference-chain/",
-			);
-		}
+	}
+	if (res.pluginInstalled) {
+		console.log(
+			"Installed Claude Code Plugin scaffold at .claude/plugins/inference-chain/",
+		);
+	}
+	if (res.installed.length) {
+		console.log(`Wrote/updated: ${res.installed.join(", ")}`);
+	} else {
+		console.log("No new files written (existing files preserved).");
+	}
+	for (const note of res.notes) {
+		console.log(`Note: ${note}`);
+	}
+}
+
+program
+	.command("install")
+	.description(
+		`Install an agent adapter (${AGENT_TARGETS.join(", ")}). MCP merge defaults on.`,
+	)
+	.requiredOption(
+		"--target <agent>",
+		`Agent target: ${AGENT_TARGETS.join(" | ")}`,
+	)
+	.option("--overwrite", "Overwrite existing adapter files")
+	.option("--no-with-mcp", "Skip project MCP config merge (default: merge on)")
+	.action(
+		(opts: {
+			target: string;
+			overwrite?: boolean;
+			withMcp?: boolean;
+		}) => {
+			if (!isAgentTarget(opts.target)) {
+				throw new Error(
+					`Unknown --target "${opts.target}". Choose one of: ${AGENT_TARGETS.join(", ")}`,
+				);
+			}
+			const withMcp = opts.withMcp !== false;
+			if (opts.target === "claude") {
+				const res = installClaude({
+					overwrite: opts.overwrite,
+					withMcp,
+				});
+				printInstallResult("claude", res);
+				return;
+			}
+			const res = installAgent(opts.target, {
+				overwrite: opts.overwrite,
+				withMcp,
+			});
+			printInstallResult(opts.target, res);
+		},
+	);
+
+program
+	.command("install-claude")
+	.description("Alias for `ic install --target claude`")
+	.option("--overwrite", "Overwrite existing .claude files")
+	.option("--no-with-mcp", "Skip MCP notes")
+	.action((opts: { overwrite?: boolean; withMcp?: boolean }) => {
+		const res = installClaude({
+			overwrite: opts.overwrite,
+			withMcp: opts.withMcp !== false,
+		});
+		printInstallResult("claude", res);
 	});
 
 const teams = program

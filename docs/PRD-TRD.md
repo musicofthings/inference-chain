@@ -208,22 +208,28 @@ Initial target: Claude Code users; solo developers; AI-native builders; vibe
 coders building serious software; developers hitting compaction/context-loss
 problems.
 
-Secondary future users: Codex CLI, Cursor, Gemini CLI, OpenHands/OpenClaw, small
-engineering teams.
+**First-class install targets** (via `ic install --target`): Claude Code,
+Codex CLI, Gemini CLI, Grok Build, Cursor, OpenHands. OpenClaw uses the same
+MCP stdio pattern as OpenHands (documented under that target). Small
+engineering teams use the opt-in `ic teams` module.
+
+See `docs/agents.md` for per-target paths and the adapter contract.
 
 ### 10. MVP promise
 ```bash
-ic init
-ic install-claude
+ic init --project-name "My Project"
+ic install --target claude   # or codex | gemini | grok | cursor | openhands
+# alias: ic install-claude
 ```
-Then in Claude Code: `/ic-checkpoint` (mid-session) or `/ic-stop` (near end).
+Then in the agent: `/ic-checkpoint` (mid-session) or `/ic-stop` (near end)
+(or the host’s equivalent — AGENTS.md / skills / MCP tools).
 Then:
 ```bash
 ic ingest .inference-chain/inbox/latest-brief.yml
 ic evolve
 ic resume
 ```
-The next Claude Code session starts with the refined operating context.
+The next coding-agent session starts with the refined operating context.
 
 ### 11. Core n+1 loop
 ```text
@@ -271,10 +277,11 @@ Inference Chain: `observe → reflect → evolve → resume`.
 `current.yml`, folder structure, initial Chain Ledger, appends
 `project_initialized` event.
 
-**2. Install Claude Code integration.** `ic install-claude` creates
-`.claude/commands/ic-{checkpoint,stop,evolve,resume}.md`, safely merges
-`.claude/settings.json`, adds hook support where safe, does not destroy existing
-settings.
+**2. Install an agent adapter.** `ic install --target <agent>` (or
+`ic install-claude`) copies host-specific commands/hooks/skills, merges MCP
+config by default (`--no-with-mcp` to skip), and never clobbers existing host
+keys unless `--overwrite`. Claude remains the reference adapter; other targets
+share `templates/common/prompts/` and the same inbox/evolve/resume loop.
 
 **3. Generate a checkpoint.** `/ic-checkpoint` → Claude writes
 `InteractionUpdate` to `.inference-chain/inbox/latest-update.yml`. User runs
@@ -299,11 +306,12 @@ verifies parent chain, reports corruption, exits non-zero on failure.
 
 ### 16. MVP scope
 
-**In scope:** `ic init`, `ic install-claude`, `ic ingest <file>`, `ic evolve`,
-`ic resume`, `ic status`, `ic verify`. Optional: `ic export`, `ic reset
---confirm`.
+**In scope:** `ic init`, `ic install --target …` (alias `ic install-claude`),
+`ic ingest <file>`, `ic evolve`, `ic resume`, `ic status`, `ic verify`.
+Optional: `ic export`, `ic reset --confirm`.
 
-**In scope (v1.1):** `ic mcp` — local MCP server for Claude Desktop. See §20.
+**In scope (v1.1):** `ic mcp` — local MCP server for Claude Desktop and any
+MCP-aware agent. See §20.
 `ic simulate <dir>` — sequential replay of pre-authored session artifacts with
 n+1 metrics output, for research and validation.
 
@@ -364,14 +372,14 @@ inference-chain/
     commands/                  # one file per CLI verb
     core/                      # schemas, hash, evolve, resume, etc.
     storage/                   # paths, files, sqlite, jsonl
-    integrations/claude/       # install, settings, commands, templates
+    integrations/              # registry + per-agent adapters + shared helpers
   templates/
-    claude/
-      commands/                # slash-command markdown
-      prompts/                 # capture/evolve/resume prompt templates
+    common/prompts/            # agent-neutral capture/evolve/resume prompts
+    claude|codex|gemini|grok|cursor|openhands/
     plugin/                    # Claude Code Plugin manifest + assets
   test/
   docs/PRD-TRD.md              # this file
+  docs/agents.md               # multi-agent install matrix
 ```
 
 Note: the flat `src/core/*` layout from v0 remains acceptable while the surface
@@ -505,9 +513,13 @@ Each artifact must carry a discriminating field (`kind` or equivalent) so
 **`ic init --project-name "..."`** — create `.inference-chain/`, SQLite,
 JSONL, prompt templates, initial `current.yml`, append `project_initialized`.
 
-**`ic install-claude`** — create `.claude/commands`, copy slash commands from
-`templates/`, safely merge `.claude/settings.json`, configure hooks
-conservatively.
+**`ic install --target <agent>`** — install a host adapter
+(`claude|codex|gemini|grok|cursor|openhands`). Copies commands/skills/hooks as
+applicable, upserts an `AGENTS.md` marker block where used, merges project MCP
+for `ic mcp` by default. `ic install-claude` is a thin alias for `--target
+claude`. Details: `docs/agents.md`.
+
+Claude hooks (also mirrored conceptually on Codex/Grok):
 
 | Hook           | Behavior                                  |
 | -------------- | ----------------------------------------- |
@@ -537,22 +549,25 @@ brief/update, current frontier, do-not-repeat count, verification status.
 parent hashes, compare count with SQLite, return non-zero on corruption.
 
 ### 11. Claude Code slash commands
-Files installed by `ic install-claude` from `templates/claude/commands/`:
+Files installed by `ic install --target claude` from `templates/claude/commands/`:
 - `/ic-checkpoint` — produce InteractionUpdate YAML
 - `/ic-stop` — produce SessionBrief YAML
 - `/ic-evolve` — produce MemoryEvolutionRecord YAML
 - `/ic-resume` — consume `resumes/resume_latest.md`
 
+Equivalent packs exist for Gemini (`.toml`), Cursor (`.cursor/commands`), and
+Grok (`.grok/skills`). Codex/OpenHands use `AGENTS.md` + MCP.
+
 ### 12. Prompt templates
-Stored in `templates/claude/prompts/`, copied into `.inference-chain/prompts/`
-by `ic init`:
+Stored in `templates/common/prompts/` (agent-neutral), copied into
+`.inference-chain/prompts/` by `ic init` and adapter installs:
 - `capture-interaction-update.md`
 - `capture-session-brief.md`
 - `evolve-ledger.md`
 - `resume-session.md`
 
 ### 13. Resume brief format
-See `templates/claude/prompts/resume-session.md` and the rendering in
+See `templates/common/prompts/resume-session.md` and the rendering in
 `src/core/resume.ts` (or equivalent). Must surface: current operating model
 (with confidence), stable learnings, active hypotheses, rejected hypotheses,
 stable decisions, current frontier (next/blockers/risks), do-not-repeat,
@@ -635,7 +650,8 @@ workflow, local-first privacy note, ledger integrity explanation, license.
 
 ### 19. Definition of done
 1. `ic init` creates a valid Inference Chain project.
-2. `ic install-claude` installs slash commands safely.
+2. `ic install --target claude` (or `ic install-claude`) installs slash
+   commands safely; other `--target` values install their host packs.
 3. `/ic-checkpoint` can create an Interaction Update.
 4. `/ic-stop` can create a Session Brief.
 5. `ic ingest` validates and stores both artifacts.

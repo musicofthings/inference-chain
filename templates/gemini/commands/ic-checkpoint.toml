@@ -1,8 +1,6 @@
----
-description: Capture an Inference Chain interaction-level checkpoint (small memory-evolution event).
-allowed-tools: Write, Read
----
+description = "Capture an Inference Chain interaction-level checkpoint."
 
+prompt = """
 # /ic-checkpoint — Inference Chain Checkpoint
 
 Generate an **Interaction Update** for the current coding-agent session.
@@ -76,3 +74,5 @@ Run:
   ic ingest .inference-chain/inbox/latest-update.yml
   ic evolve
 ```
+
+"""

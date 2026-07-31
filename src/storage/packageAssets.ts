@@ -22,14 +22,15 @@ export function templatesRoot(): string {
 
 export const TEMPLATE = {
 	promptCaptureUpdate: () =>
-		join(templatesRoot(), "claude", "prompts", "capture-interaction-update.md"),
+		join(templatesRoot(), "common", "prompts", "capture-interaction-update.md"),
 	promptCaptureBrief: () =>
-		join(templatesRoot(), "claude", "prompts", "capture-session-brief.md"),
+		join(templatesRoot(), "common", "prompts", "capture-session-brief.md"),
 	promptEvolveLedger: () =>
-		join(templatesRoot(), "claude", "prompts", "evolve-ledger.md"),
+		join(templatesRoot(), "common", "prompts", "evolve-ledger.md"),
 	promptResumeSession: () =>
-		join(templatesRoot(), "claude", "prompts", "resume-session.md"),
+		join(templatesRoot(), "common", "prompts", "resume-session.md"),
 	claudeCommand: (name: string) =>
 		join(templatesRoot(), "claude", "commands", `${name}.md`),
 	pluginRoot: () => join(templatesRoot(), "plugin"),
+	agentRoot: (agent: string) => join(templatesRoot(), agent),
 };

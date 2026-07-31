@@ -1,6 +1,6 @@
 ---
-description: Resume a coding-agent session from the latest Inference Chain resume brief.
-allowed-tools: Read
+name: ic-resume
+description: Resume from the latest Inference Chain resume brief.
 ---
 
 # /ic-resume — Inference Chain Resume

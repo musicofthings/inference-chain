@@ -14,7 +14,7 @@ superseded by a later revision committed there).
 ## Architecture (current layout)
 ```
 src/
-  cli.ts                       # Commander entrypoint (init/ingest/evolve/resume/status/verify/install-claude)
+  cli.ts                       # Commander entrypoint (init/ingest/evolve/resume/status/verify/install)
   core/
     schemas.ts                 # Zod schemas: InteractionUpdate, SessionBrief, MemoryEvolutionRecord, ChainLedger
     evolve.ts                  # evolveLedger(): deterministic merge + MemoryEvolutionRecord emission
@@ -28,13 +28,16 @@ src/
     jsonl.ts                   # append-only hash-chained ledger + verifyChain
     sqlite.ts                  # SQLite schema + insert helpers + chain_state upsert
   integrations/
-    claude/install.ts          # install-claude: copies templates, merges .claude/settings.json hooks, installs plugin
+    registry.ts                # ic install --target registry
+    shared/                    # copy/merge/MCP/prompt helpers
+    claude|codex|gemini|grok|cursor|openhands/
 templates/
-  claude/commands/*.md         # slash command bodies (/ic-checkpoint, /ic-stop, /ic-evolve, /ic-resume)
-  claude/prompts/*.md          # prompt templates copied into .inference-chain/prompts/ by `ic init`
-  plugin/                      # Claude Code Plugin manifest (.claude-plugin/plugin.json + commands/ + hooks/)
+  common/prompts/              # agent-neutral prompts → .inference-chain/prompts/
+  claude|codex|gemini|grok|cursor|openhands/  # per-host packs
+  plugin/                      # Claude Code Plugin manifest
 test/                          # vitest
 docs/PRD-TRD.md                # spec
+docs/agents.md                 # multi-agent install matrix
 ```
 
 The flat `src/core/*` layout is acceptable while files stay small. Split into
@@ -112,9 +115,9 @@ node /path/to/inference-chain/dist/cli.js resume
 5. **`evolveLedger` is pure.** It returns `{ evolutionRecord, updatedLedger }`
    and does not touch disk. All IO lives in `cli.ts` / `storage/`.
 
-6. **Templates are bundled, not inlined.** `install-claude` copies from
-   `templates/claude/commands/` — do not write slash command strings inline
-   in `src/`. If you need to change a slash command, edit the template.
+6. **Templates are bundled, not inlined.** `ic install --target` copies from
+   `templates/<agent>/` (prompts from `templates/common/prompts/`) — do not
+   write slash command strings inline in `src/`. Edit the template instead.
 
 ## Style
 - TypeScript strict; ESM (`type: module`), so import paths use `.js`

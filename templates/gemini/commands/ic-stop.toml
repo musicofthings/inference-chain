@@ -1,8 +1,6 @@
----
-description: Capture an Inference Chain session-level handoff (final Session Brief).
-allowed-tools: Write, Read
----
+description = "Capture an Inference Chain session-level Session Brief."
 
+prompt = """
 # /ic-stop — Inference Chain Stop Brief
 
 Generate the **final Session Brief** for this coding-agent session.
@@ -86,3 +84,5 @@ Run:
   ic evolve
   ic resume
 ```
+
+"""
