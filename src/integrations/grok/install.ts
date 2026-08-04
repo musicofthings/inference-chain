@@ -1,23 +1,13 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { templatesRoot } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
-import { copyTree } from "../shared/fs.js";
+import { COMMON_COMMANDS, writeGrokSkillCommand } from "../shared/commands.js";
 import { mcpSnippetNotes, mcpTomlSectionBody } from "../shared/mcp.js";
 import {
 	mergeJsonKeyAbsent,
 	mergeTomlSectionAbsent,
 	upsertAgentsMdBlock,
 } from "../shared/merge.js";
-import { writeNeutralPrompts } from "../shared/prompts.js";
+import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
-
-function agentsBody(): string {
-	const path = join(templatesRoot(), "common", "AGENTS.inference-chain.md");
-	return existsSync(path)
-		? readFileSync(path, "utf8")
-		: "## Inference Chain\n\nSee docs/agents.md\n";
-}
 
 function desiredGrokHooks(): Record<string, unknown> {
 	return {
@@ -65,22 +55,15 @@ export function installGrok(opts: InstallOpts): InstallResult {
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
 
-	if (upsertAgentsMdBlock(p("AGENTS.md"), agentsBody())) {
+	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
 	}
 
-	const skillsSrc = join(templatesRoot(), "grok", "skills");
-	if (existsSync(skillsSrc)) {
-		for (const name of readdirSync(skillsSrc, { withFileTypes: true })) {
-			if (!name.isDirectory()) continue;
-			copyTree(
-				join(skillsSrc, name.name),
-				p(".grok", "skills", name.name),
-				opts.overwrite,
-				installed,
-				process.cwd(),
-			);
-		}
+	for (const name of COMMON_COMMANDS) {
+		writeGrokSkillCommand(p(".grok", "skills", name), name, {
+			overwrite: opts.overwrite,
+			installed,
+		});
 	}
 
 	const hooksPath = p(".grok", "hooks", "inference-chain.json");

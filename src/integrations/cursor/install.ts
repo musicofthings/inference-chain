@@ -1,7 +1,11 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { templatesRoot } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
+import {
+	COMMON_COMMANDS,
+	writeCursorMarkdownCommand,
+} from "../shared/commands.js";
 import { copyOne } from "../shared/fs.js";
 import { mcpJsonServerEntry } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent } from "../shared/merge.js";
@@ -14,18 +18,11 @@ export function installCursor(opts: InstallOpts): InstallResult {
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
 
-	const cmdsSrc = join(templatesRoot(), "cursor", "commands");
-	if (existsSync(cmdsSrc)) {
-		for (const file of readdirSync(cmdsSrc)) {
-			if (!file.endsWith(".md")) continue;
-			copyOne(
-				join(cmdsSrc, file),
-				p(".cursor", "commands", file),
-				opts.overwrite,
-				installed,
-				process.cwd(),
-			);
-		}
+	for (const name of COMMON_COMMANDS) {
+		writeCursorMarkdownCommand(p(".cursor", "commands", `${name}.md`), name, {
+			overwrite: opts.overwrite,
+			installed,
+		});
 	}
 
 	const ruleSrc = join(

@@ -67,18 +67,18 @@ pnpm link --global
 
 cd /path/to/your/project
 ic init --project-name "My Project"
-ic install --target claude   # or: codex | gemini | grok | cursor | openhands
+ic install --target claude   # or: --all | --detect | --target cursor,vscode
 # alias: ic install-claude
 ```
 
 `ic install --target claude` will:
-1. Copy slash commands to `.claude/commands/ic-*.md` (skips files that
-   already exist unless `--overwrite`).
+1. Write slash commands to `.claude/commands/ic-*.md` from
+   `templates/common/commands/` (skips existing files unless `--overwrite`).
 2. Merge `SessionStart` / `PreCompact` / `Stop` hooks into
    `.claude/settings.json` without clobbering your existing settings.
 3. Drop a Claude Code Plugin scaffold into
-   `.claude/plugins/inference-chain/` so the project can be enabled with
-   `/plugin` if your Claude Code version supports plugins.
+   `.claude/plugins/inference-chain/` with full command bodies.
+4. Merge project MCP into `.mcp.json` (Claude Code project scope; not settings.json).
 
 Other targets install the equivalent host pack (commands, hooks, skills,
 `AGENTS.md`, and project MCP for `ic mcp`). See [docs/agents.md](docs/agents.md).
@@ -127,12 +127,13 @@ frontier without rediscovering rejected hypotheses.
 | ------------------------------- | --------------------------------------------------------- |
 | `ic init --project-name`        | Initialize `.inference-chain/`, SQLite, JSONL, templates  |
 | `ic init --force`               | Wipe an existing project and re-initialize                |
-| `ic install --target <agent>`   | Install host adapter (`claude\|codex\|gemini\|grok\|cursor\|openhands`) |
+| `ic install --target\|--all\|--detect` | Install host adapter(s) (see `docs/agents.md`) |
 | `ic install-claude`             | Alias for `ic install --target claude` |
 | `ic ingest <file>`              | Validate + store an artifact (routes by `kind`; idempotent on id) |
 | `ic evolve [--advance]`         | Apply latest brief/update under the ledger lock           |
 | `ic resume [--silent]`          | Generate `resumes/resume_latest.md`                        |
 | `ic status`                     | Show iteration, event count, ledger sizes, score          |
+| `ic doctor [--json] [--strict]` | Check init, ledger, hosts, and adapter wiring             |
 | `ic verify`                     | Replay hash chain; SQLite parity; `current.yml` tip check |
 | `ic mcp [--cwd <dir>]`          | Start an MCP stdio server for Claude Desktop              |
 | `ic simulate <dir>`             | Replay session artifacts and print n+1 sharpness metrics  |
@@ -156,7 +157,8 @@ Add an entry to your `claude_desktop_config.json`:
 ```
 
 Tools exposed: `chain_status`, `chain_resume_brief`, `chain_ingest_update`,
-`chain_ingest_brief`, `chain_evolve`, `chain_verify`. The MCP server
+`chain_ingest_brief`, `chain_ingest_evolution`, `chain_evolve`, `chain_verify`.
+The MCP server
 resolves `.inference-chain/` from `--cwd`, so multiple Desktop projects can
 each have their own ledger — as long as each session starts in the same
 folder, the ledger is the key.

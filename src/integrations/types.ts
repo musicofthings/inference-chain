@@ -5,6 +5,14 @@ export const AGENT_TARGETS = [
 	"grok",
 	"cursor",
 	"openhands",
+	"generic",
+	"desktop",
+	"copilot",
+	"vscode",
+	"opencode",
+	"chatgpt",
+	"windsurf",
+	"continue",
 ] as const;
 
 export type AgentTarget = (typeof AGENT_TARGETS)[number];

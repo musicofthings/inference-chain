@@ -1,8 +1,10 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { TEMPLATE, templatesRoot } from "../../storage/packageAssets.js";
+import { TEMPLATE } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
-import { copyOne, copyTree } from "../shared/fs.js";
+import { installClaudeStyleCommands } from "../shared/commands.js";
+import { copyTree } from "../shared/fs.js";
+import { mcpJsonServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent } from "../shared/merge.js";
 import { writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
@@ -53,30 +55,25 @@ export function installClaude(
 	pluginInstalled: boolean;
 } {
 	const overwrite = opts.overwrite ?? false;
+	const withMcp = opts.withMcp ?? true;
 	const installed: string[] = [];
 	const notes: string[] = [];
 
 	writeNeutralPrompts({ overwrite, installed });
 
-	const cmdsSrc = join(templatesRoot(), "claude", "commands");
-	const installedCommands: string[] = [];
-	if (existsSync(cmdsSrc)) {
-		for (const file of readdirSync(cmdsSrc)) {
-			if (!file.endsWith(".md")) continue;
-			const dest = p(".claude", "commands", file);
-			if (
-				copyOne(join(cmdsSrc, file), dest, overwrite, installed, process.cwd())
-			) {
-				installedCommands.push(file);
-			}
-		}
-	}
+	const installedCommands = installClaudeStyleCommands(
+		p(".claude", "commands"),
+		{
+			overwrite,
+			installed,
+		},
+	);
 
 	const settingsPath = p(".claude", "settings.json");
 	const hooksMerged = mergeJsonKeyAbsent(
 		settingsPath,
 		{ hooks: desiredClaudeHooks() },
-		{ overwrite: false, warnLabel: settingsPath },
+		{ overwrite, warnLabel: settingsPath },
 	);
 	if (hooksMerged) installed.push(".claude/settings.json");
 
@@ -86,12 +83,29 @@ export function installClaude(
 		const dest = p(".claude", "plugins", "inference-chain");
 		copyTree(pluginSrc, dest, overwrite, installed, process.cwd());
 		pluginInstalled = true;
+		// Replace stub plugin commands with full bodies from common/commands.
+		installClaudeStyleCommands(join(dest, "commands"), {
+			overwrite: true,
+			installed,
+		});
 	}
 
-	if (opts.withMcp) {
-		notes.push(
-			"Claude Code MCP: add `ic mcp --cwd <project>` via your Claude MCP settings if desired (slash commands cover the common loop).",
-		);
+	if (withMcp) {
+		const mcpPath = p(".mcp.json");
+		if (
+			mergeJsonKeyAbsent(
+				mcpPath,
+				{
+					mcpServers: {
+						"inference-chain": mcpJsonServerEntry(),
+					},
+				},
+				{ overwrite, warnLabel: mcpPath },
+			)
+		) {
+			installed.push(".mcp.json");
+		}
+		notes.push(...mcpSnippetNotes("claude"));
 	}
 
 	return {

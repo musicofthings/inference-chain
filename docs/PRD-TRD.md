@@ -209,16 +209,18 @@ coders building serious software; developers hitting compaction/context-loss
 problems.
 
 **First-class install targets** (via `ic install --target`): Claude Code,
-Codex CLI, Gemini CLI, Grok Build, Cursor, OpenHands. OpenClaw uses the same
-MCP stdio pattern as OpenHands (documented under that target). Small
-engineering teams use the opt-in `ic teams` module.
+Codex CLI, Gemini CLI, Grok Build, Cursor, OpenHands. Portable / Desktop:
+`generic`, `desktop`. Thin IDE adapters: `copilot`, `vscode`, `opencode`,
+`chatgpt`, `windsurf`, `continue`. OpenClaw uses the same MCP stdio pattern as
+OpenHands (documented under that target). Small engineering teams use the
+opt-in `ic teams` module.
 
 See `docs/agents.md` for per-target paths and the adapter contract.
 
 ### 10. MVP promise
 ```bash
 ic init --project-name "My Project"
-ic install --target claude   # or codex | gemini | grok | cursor | openhands
+ic install --target claude   # or codex | gemini | grok | cursor | openhands | …
 # alias: ic install-claude
 ```
 Then in the agent: `/ic-checkpoint` (mid-session) or `/ic-stop` (near end)
@@ -307,7 +309,8 @@ verifies parent chain, reports corruption, exits non-zero on failure.
 ### 16. MVP scope
 
 **In scope:** `ic init`, `ic install --target …` (alias `ic install-claude`),
-`ic ingest <file>`, `ic evolve`, `ic resume`, `ic status`, `ic verify`.
+`ic ingest <file>`, `ic evolve`, `ic resume`, `ic status`, `ic verify`,
+`ic doctor`.
 Optional: `ic export`, `ic reset --confirm`.
 
 **In scope (v1.1):** `ic mcp` — local MCP server for Claude Desktop and any
@@ -375,7 +378,7 @@ inference-chain/
     integrations/              # registry + per-agent adapters + shared helpers
   templates/
     common/prompts/            # agent-neutral capture/evolve/resume prompts
-    claude|codex|gemini|grok|cursor|openhands/
+    claude|codex|gemini|grok|cursor|openhands|generic|desktop|copilot|vscode|opencode|chatgpt|windsurf|continue/
     plugin/                    # Claude Code Plugin manifest + assets
   test/
   docs/PRD-TRD.md              # this file
@@ -513,11 +516,15 @@ Each artifact must carry a discriminating field (`kind` or equivalent) so
 **`ic init --project-name "..."`** — create `.inference-chain/`, SQLite,
 JSONL, prompt templates, initial `current.yml`, append `project_initialized`.
 
-**`ic install --target <agent>`** — install a host adapter
-(`claude|codex|gemini|grok|cursor|openhands`). Copies commands/skills/hooks as
-applicable, upserts an `AGENTS.md` marker block where used, merges project MCP
-for `ic mcp` by default. `ic install-claude` is a thin alias for `--target
-claude`. Details: `docs/agents.md`.
+**`ic install --target <agent[,…]> | --all | --detect`** — install host
+adapter(s) (see `AGENT_TARGETS` in `src/integrations/types.ts`). Copies
+commands/skills/hooks as applicable, upserts an `AGENTS.md` marker block where
+used, merges project MCP for `ic mcp` by default. `--all` installs the curated
+multi-host set; `--detect` installs adapters for hosts already present in the
+repo (falls back to `generic`). Command bodies are single-sourced from
+`templates/common/commands/`. Capability matrix:
+`src/integrations/capabilities.ts`. `ic install-claude` is a thin alias for
+`--target claude`. Details: `docs/agents.md`.
 
 Claude hooks (also mirrored conceptually on Codex/Grok):
 
@@ -538,25 +545,33 @@ preserve iteration unless `--advance`; append `memory_evolution_created` +
 `ledger_evolved`; *move processed inbox file to its archive folder so re-runs
 don't double-apply*.
 
-**`ic resume [--silent] [--target claude-code]`** — read current ledger,
+**`ic resume [--silent]`** — read current ledger,
 generate resume markdown to `resumes/resume_latest.md`, print unless silent,
 append `resume_brief_generated`.
 
 **`ic status`** — project name, current iteration, event count, latest
 brief/update, current frontier, do-not-repeat count, verification status.
 
+**`ic doctor [--json] [--strict]`** — operator health check: project init,
+ledger verify, MCP launch resolution, detected coding-agent hosts, and whether
+Inference Chain wiring (commands/MCP/AGENTS) is present for each. Exit
+non-zero on failures; `--strict` also fails on warnings. See
+`src/doctor.ts`.
+
 **`ic verify`** — parse `ledger.jsonl`, recompute hash of every event, verify
 parent hashes, compare count with SQLite, return non-zero on corruption.
 
 ### 11. Claude Code slash commands
-Files installed by `ic install --target claude` from `templates/claude/commands/`:
+Files installed by `ic install --target claude` are generated from
+`templates/common/commands/` with Claude frontmatter (also written into the
+plugin pack):
 - `/ic-checkpoint` — produce InteractionUpdate YAML
 - `/ic-stop` — produce SessionBrief YAML
 - `/ic-evolve` — produce MemoryEvolutionRecord YAML
 - `/ic-resume` — consume `resumes/resume_latest.md`
 
-Equivalent packs exist for Gemini (`.toml`), Cursor (`.cursor/commands`), and
-Grok (`.grok/skills`). Codex/OpenHands use `AGENTS.md` + MCP.
+Equivalent wraps exist for Gemini (`.toml`), Cursor (`.cursor/commands`), and
+Grok (`.grok/skills`). Codex/OpenHands and thin IDE targets use `AGENTS.md` + MCP.
 
 ### 12. Prompt templates
 Stored in `templates/common/prompts/` (agent-neutral), copied into
@@ -686,8 +701,9 @@ Desktop config snippet pins cwd via `args: ["mcp", "--cwd", "<project>"]`.
 | --------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
 | `chain_status`              | none                                | JSON: project, iteration, sizes, score, last event                           |
 | `chain_resume_brief`        | none                                | markdown resume brief for the current ledger (also writes resume_latest.md)  |
-| `chain_ingest_update`       | `update: <InteractionUpdate YAML or JSON>` | Validates + persists; appends `interaction_update_captured`           |
-| `chain_ingest_brief`        | `brief: <SessionBrief YAML or JSON>`       | Validates + persists; appends `session_brief_captured`                |
+| `chain_ingest_update`       | `body: <InteractionUpdate YAML or JSON>` | Validates + persists; appends `interaction_update_captured`           |
+| `chain_ingest_brief`        | `body: <SessionBrief YAML or JSON>`       | Validates + persists; appends `session_brief_captured`                |
+| `chain_ingest_evolution`    | `body: <MemoryEvolutionRecord YAML or JSON>` | Archives under evolutions/; appends `memory_evolution_created` (idempotent on id; does not rewrite current.yml) |
 | `chain_evolve`              | `advance?: boolean`                 | Reads inbox, calls `evolveLedger`, writes record + updates ledger; returns `{from, to, score_before, score_after}` |
 | `chain_verify`              | none                                | Runs hash-chain verification; returns `{ok, total, errors}`                  |
 

@@ -112,10 +112,11 @@ describe("installAgent adapters", () => {
 		expect(isAgentTarget("nope")).toBe(false);
 	});
 
-	it("installs claude commands and hooks", () => {
-		const res = installClaude({ overwrite: false });
+	it("installs claude commands, hooks, and .mcp.json", () => {
+		const res = installClaude({ overwrite: false, withMcp: true });
 		expect(existsSync(".claude/commands/ic-checkpoint.md")).toBe(true);
 		expect(existsSync(".claude/settings.json")).toBe(true);
+		expect(existsSync(".mcp.json")).toBe(true);
 		const settings = JSON.parse(readFileSync(".claude/settings.json", "utf8"));
 		expect(settings.hooks.SessionStart).toBeTruthy();
 		expect(res.installedCommands.length).toBeGreaterThan(0);
@@ -184,5 +185,9 @@ describe("installAgent adapters", () => {
 		installAgent("codex", { withMcp: false });
 		expect(existsSync(".codex/hooks.json")).toBe(true);
 		expect(existsSync(".codex/config.toml")).toBe(false);
+
+		const oh = installAgent("openhands", { withMcp: false });
+		expect(existsSync(".openhands/mcp.json")).toBe(false);
+		expect(oh.notes.some((n) => n.includes("openclaw"))).toBe(false);
 	});
 });

@@ -1,8 +1,3 @@
----
-description: Capture an Inference Chain interaction-level checkpoint (small memory-evolution event).
-allowed-tools: Write, Read
----
-
 # /ic-checkpoint — Inference Chain Checkpoint
 
 Generate an **Interaction Update** for the current coding-agent session.

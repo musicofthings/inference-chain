@@ -29,8 +29,8 @@ export const TEMPLATE = {
 		join(templatesRoot(), "common", "prompts", "evolve-ledger.md"),
 	promptResumeSession: () =>
 		join(templatesRoot(), "common", "prompts", "resume-session.md"),
-	claudeCommand: (name: string) =>
-		join(templatesRoot(), "claude", "commands", `${name}.md`),
+	commonCommand: (name: string) =>
+		join(templatesRoot(), "common", "commands", `${name}.md`),
 	pluginRoot: () => join(templatesRoot(), "plugin"),
 	agentRoot: (agent: string) => join(templatesRoot(), agent),
 };

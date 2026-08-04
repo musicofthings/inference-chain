@@ -1,8 +1,3 @@
----
-description: Capture an Inference Chain session-level handoff (final Session Brief).
-allowed-tools: Write, Read
----
-
 # /ic-stop — Inference Chain Stop Brief
 
 Generate the **final Session Brief** for this coding-agent session.

@@ -28,14 +28,19 @@ src/
     jsonl.ts                   # append-only hash-chained ledger + verifyChain
     sqlite.ts                  # SQLite schema + insert helpers + chain_state upsert
   integrations/
-    registry.ts                # ic install --target registry
-    shared/                    # copy/merge/MCP/prompt helpers
-    claude|codex|gemini|grok|cursor|openhands/
+    registry.ts                # ic install --target|--all|--detect registry
+    detect.ts / targets.ts     # host markers + install plan parsing
+    capabilities.ts            # per-host surface matrix (commands/hooks/…)
+    evidence.ts                # install wiring inspection for ic doctor
+    shared/                    # copy/merge/MCP/prompt/command helpers
+    <target>/                  # per-host adapters (see docs/agents.md)
+  doctor.ts                    # ic doctor — init/verify/hosts/wiring health
+  mcp/server.ts                # ic mcp stdio tools
 templates/
   common/prompts/              # agent-neutral prompts → .inference-chain/prompts/
-  claude|codex|gemini|grok|cursor|openhands/  # per-host packs
-  plugin/                      # Claude Code Plugin manifest
-test/                          # vitest
+  common/commands/             # shared slash/skill bodies (host-wrapped at install)
+  cursor|plugin|…              # host-only extras (rules, plugin scaffold)
+test/                          # vitest (+ test/evals/ phase acceptance)
 docs/PRD-TRD.md                # spec
 docs/agents.md                 # multi-agent install matrix
 ```

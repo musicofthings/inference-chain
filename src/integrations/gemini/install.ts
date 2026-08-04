@@ -1,8 +1,5 @@
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { templatesRoot } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
-import { copyOne } from "../shared/fs.js";
+import { COMMON_COMMANDS, writeGeminiTomlCommand } from "../shared/commands.js";
 import { mcpJsonServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent } from "../shared/merge.js";
 import { writeNeutralPrompts } from "../shared/prompts.js";
@@ -14,18 +11,11 @@ export function installGemini(opts: InstallOpts): InstallResult {
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
 
-	const cmdsSrc = join(templatesRoot(), "gemini", "commands");
-	if (existsSync(cmdsSrc)) {
-		for (const file of readdirSync(cmdsSrc)) {
-			if (!file.endsWith(".toml")) continue;
-			copyOne(
-				join(cmdsSrc, file),
-				p(".gemini", "commands", file),
-				opts.overwrite,
-				installed,
-				process.cwd(),
-			);
-		}
+	for (const name of COMMON_COMMANDS) {
+		writeGeminiTomlCommand(p(".gemini", "commands", `${name}.toml`), name, {
+			overwrite: opts.overwrite,
+			installed,
+		});
 	}
 
 	if (opts.withMcp) {

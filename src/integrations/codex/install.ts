@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { templatesRoot } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
 import { mcpSnippetNotes, mcpTomlSectionBody } from "../shared/mcp.js";
 import {
@@ -8,7 +5,7 @@ import {
 	mergeTomlSectionAbsent,
 	upsertAgentsMdBlock,
 } from "../shared/merge.js";
-import { writeNeutralPrompts } from "../shared/prompts.js";
+import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
 function desiredCodexHooks(): Record<string, unknown> {
@@ -54,20 +51,13 @@ function desiredCodexHooks(): Record<string, unknown> {
 	};
 }
 
-function agentsBody(): string {
-	const path = join(templatesRoot(), "common", "AGENTS.inference-chain.md");
-	return existsSync(path)
-		? readFileSync(path, "utf8")
-		: "## Inference Chain\n\nSee docs/agents.md\n";
-}
-
 export function installCodex(opts: InstallOpts): InstallResult {
 	const installed: string[] = [];
 	const notes: string[] = [];
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
 
-	if (upsertAgentsMdBlock(p("AGENTS.md"), agentsBody())) {
+	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
 	}
 

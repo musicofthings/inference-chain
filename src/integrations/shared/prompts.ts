@@ -1,8 +1,16 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { templatesRoot } from "../../storage/packageAssets.js";
 import { ic } from "../../storage/paths.js";
 import { copyOne } from "./fs.js";
+
+/** Canonical AGENTS.md / instruction blob body (no marker wrappers). */
+export function readAgentsBody(): string {
+	const path = join(templatesRoot(), "common", "AGENTS.inference-chain.md");
+	return existsSync(path)
+		? readFileSync(path, "utf8")
+		: "## Inference Chain\n\nSee docs/agents.md\n";
+}
 
 /** Copy agent-neutral prompts into `.inference-chain/prompts/` if missing. */
 export function writeNeutralPrompts(

@@ -14,13 +14,20 @@ import {
 	MemoryEvolutionRecordSchema,
 	SessionBriefSchema,
 } from "./core/schemas.js";
+import { formatDoctorReport, runDoctor } from "./doctor.js";
+import {
+	HOST_CAPABILITIES,
+	formatCapabilities,
+} from "./integrations/capabilities.js";
 import { installClaude } from "./integrations/claude/install.js";
 import {
 	AGENT_TARGETS,
 	installAgent,
-	isAgentTarget,
+	installAgents,
 } from "./integrations/registry.js";
+import { planFromFlags } from "./integrations/targets.js";
 import { installTeams } from "./integrations/teams/install.js";
+import type { AgentTarget } from "./integrations/types.js";
 import { writeFileAtomic } from "./storage/atomicWrite.js";
 import { TEMPLATE } from "./storage/packageAssets.js";
 import { PATHS, ic, p } from "./storage/paths.js";
@@ -34,6 +41,7 @@ import {
 import {
 	type DB,
 	eventCount,
+	hasEvolution,
 	insertEvolution,
 	openDb,
 } from "./storage/sqlite.js";
@@ -129,42 +137,102 @@ function printInstallResult(
 	}
 }
 
+function warnIfLedgerMissing(): void {
+	if (!existsSync(PATHS.currentYml())) {
+		console.error(
+			"[inference-chain] WARN: no .inference-chain/current.yml — run `ic init --project-name <name>` before using the ledger or MCP tools.",
+		);
+	}
+}
+
+function printMultiInstall(
+	planLabel: string,
+	targets: AgentTarget[],
+	res: { installed: string[]; notes: string[] },
+	extraNotes: string[] = [],
+): void {
+	console.log(
+		`Installed Inference Chain adapters (${planLabel}): ${targets.join(", ")}`,
+	);
+	for (const t of targets) {
+		console.log(`  ${t}: ${formatCapabilities(HOST_CAPABILITIES[t])}`);
+	}
+	if (res.installed.length) {
+		console.log(`Wrote/updated: ${res.installed.join(", ")}`);
+	} else {
+		console.log("No new files written (existing files preserved).");
+	}
+	for (const note of [...extraNotes, ...res.notes]) {
+		console.log(`Note: ${note}`);
+	}
+}
+
 program
 	.command("install")
 	.description(
-		`Install an agent adapter (${AGENT_TARGETS.join(", ")}). MCP merge defaults on.`,
+		`Install agent adapter(s). Use --target, --all, or --detect. Targets: ${AGENT_TARGETS.join(", ")}.`,
 	)
-	.requiredOption(
+	.option(
 		"--target <agent>",
-		`Agent target: ${AGENT_TARGETS.join(" | ")}`,
+		`Agent target(s): ${AGENT_TARGETS.join(" | ")}, or all | detect (comma-separated ok)`,
+	)
+	.option("--all", "Install adapters for all multi-host targets")
+	.option(
+		"--detect",
+		"Install adapters for hosts detected in this repo (falls back to generic)",
 	)
 	.option("--overwrite", "Overwrite existing adapter files")
 	.option("--no-with-mcp", "Skip project MCP config merge (default: merge on)")
 	.action(
 		(opts: {
-			target: string;
+			target?: string;
+			all?: boolean;
+			detect?: boolean;
 			overwrite?: boolean;
 			withMcp?: boolean;
 		}) => {
-			if (!isAgentTarget(opts.target)) {
-				throw new Error(
-					`Unknown --target "${opts.target}". Choose one of: ${AGENT_TARGETS.join(", ")}`,
-				);
-			}
+			const plan = planFromFlags({
+				target: opts.target,
+				all: opts.all,
+				detect: opts.detect,
+			});
 			const withMcp = opts.withMcp !== false;
-			if (opts.target === "claude") {
-				const res = installClaude({
-					overwrite: opts.overwrite,
-					withMcp,
-				});
-				printInstallResult("claude", res);
-				return;
-			}
-			const res = installAgent(opts.target, {
+			const installOpts = {
 				overwrite: opts.overwrite,
 				withMcp,
-			});
-			printInstallResult(opts.target, res);
+			};
+			warnIfLedgerMissing();
+
+			if (plan.mode === "targets" && plan.targets.length === 1) {
+				const target = plan.targets[0];
+				if (target === "claude") {
+					const res = installClaude(installOpts);
+					printInstallResult("claude", res);
+					return;
+				}
+				const res = installAgent(target, installOpts);
+				printInstallResult(target, res);
+				return;
+			}
+
+			const multi = installAgents(plan.targets, installOpts);
+			const extraNotes: string[] = [];
+			if (plan.mode === "detect") {
+				if (plan.fallback) {
+					extraNotes.push(
+						"No host markers detected; installed generic (AGENTS.md + MCP notes).",
+					);
+				} else {
+					for (const d of plan.detected) {
+						extraNotes.push(`Detected ${d.target} via ${d.matched.join(", ")}`);
+					}
+				}
+			} else if (plan.mode === "all") {
+				extraNotes.push(
+					"Skipped chatgpt (use --target chatgpt or codex+desktop). Teams mode is separate: ic teams init.",
+				);
+			}
+			printMultiInstall(plan.mode, plan.targets, multi, extraNotes);
 		},
 	);
 
@@ -174,6 +242,7 @@ program
 	.option("--overwrite", "Overwrite existing .claude files")
 	.option("--no-with-mcp", "Skip MCP notes")
 	.action((opts: { overwrite?: boolean; withMcp?: boolean }) => {
+		warnIfLedgerMissing();
 		const res = installClaude({
 			overwrite: opts.overwrite,
 			withMcp: opts.withMcp !== false,
@@ -340,6 +409,7 @@ program
 			} else if (kind === "memory_evolution_record") {
 				const parsed = MemoryEvolutionRecordSchema.parse(raw);
 				const dest = ic("evolutions", `${parsed.id}.yml`);
+				const existed = hasEvolution(db, parsed.id);
 				copyFileSync(p(file), dest);
 				insertEvolution(db, {
 					id: parsed.id,
@@ -349,13 +419,19 @@ program
 					yaml: YAML.stringify(parsed),
 					createdAt,
 				});
-				appendChainEvent(db, {
-					projectId: parsed.project_id,
-					iteration: parsed.to_iteration,
-					type: "memory_evolution_created",
-					payload: { id: parsed.id, source: parsed.source },
-				});
-				console.log(`Ingested MemoryEvolutionRecord ${parsed.id}`);
+				if (!existed) {
+					appendChainEvent(db, {
+						projectId: parsed.project_id,
+						iteration: parsed.to_iteration,
+						type: "memory_evolution_created",
+						payload: { id: parsed.id, source: parsed.source },
+					});
+				}
+				console.log(
+					existed
+						? `Already ingested MemoryEvolutionRecord ${parsed.id}; archived copy refreshed.`
+						: `Ingested MemoryEvolutionRecord ${parsed.id}`,
+				);
 			} else if (kind === "chain_ledger") {
 				const parsed = ChainLedgerSchema.parse(raw);
 				const snapshotId = `ledger-${parsed.iteration}-${nanoid(6)}`;
@@ -443,6 +519,23 @@ program.command("status").action(() => {
 	console.log(`blockers       ${ledger.current_frontier.blockers.length}`);
 	console.log(`score          ${scoreLedger(ledger)}`);
 });
+
+program
+	.command("doctor")
+	.description(
+		"Check project init, ledger integrity, detected hosts, and adapter wiring.",
+	)
+	.option("--json", "Emit the doctor report as JSON")
+	.option("--strict", "Exit non-zero on warnings as well as failures")
+	.action((opts: { json?: boolean; strict?: boolean }) => {
+		const report = runDoctor({ strict: opts.strict });
+		if (opts.json) {
+			console.log(JSON.stringify(report, null, 2));
+		} else {
+			console.log(formatDoctorReport(report));
+		}
+		if (!report.healthy) process.exitCode = 1;
+	});
 
 program
 	.command("mcp")

@@ -1,10 +1,11 @@
 import { p } from "../../storage/paths.js";
-import { mcpJsonServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
+import { mcpSnippetNotes, mcpVscodeServerEntry } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent, upsertAgentsMdBlock } from "../shared/merge.js";
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-export function installOpenHands(opts: InstallOpts): InstallResult {
+/** VS Code Copilot Chat / Agent mode: .vscode/mcp.json + AGENTS.md. */
+export function installVscode(opts: InstallOpts): InstallResult {
 	const installed: string[] = [];
 	const notes: string[] = [];
 
@@ -15,31 +16,27 @@ export function installOpenHands(opts: InstallOpts): InstallResult {
 	}
 
 	if (opts.withMcp) {
-		const mcpPath = p(".openhands", "mcp.json");
-		const entry = mcpJsonServerEntry();
+		const mcpPath = p(".vscode", "mcp.json");
 		if (
 			mergeJsonKeyAbsent(
 				mcpPath,
 				{
-					mcpServers: {
-						"inference-chain": entry,
+					servers: {
+						"inference-chain": mcpVscodeServerEntry(),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: mcpPath },
 			)
 		) {
-			installed.push(".openhands/mcp.json");
+			installed.push(".vscode/mcp.json");
 		}
-		notes.push(...mcpSnippetNotes("openhands"));
-		notes.push(
-			"If your OpenHands build only reads ~/.openhands/mcp.json, merge the same mcpServers.inference-chain entry there.",
-		);
+		notes.push(...mcpSnippetNotes("vscode"));
 	}
 
-	return { target: "openhands", installed, notes };
+	return { target: "vscode", installed, notes };
 }
 
-export const openhandsAdapter: AgentAdapter = {
-	id: "openhands",
-	install: installOpenHands,
+export const vscodeAdapter: AgentAdapter = {
+	id: "vscode",
+	install: installVscode,
 };

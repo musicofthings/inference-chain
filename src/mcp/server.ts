@@ -9,6 +9,7 @@ import {
 	type ChainLedger,
 	ChainLedgerSchema,
 	InteractionUpdateSchema,
+	MemoryEvolutionRecordSchema,
 	SessionBriefSchema,
 } from "../core/schemas.js";
 import { writeFileAtomic } from "../storage/atomicWrite.js";
@@ -22,7 +23,13 @@ import {
 	evolveFromInbox,
 	verifyLedger,
 } from "../storage/persist.js";
-import { type DB, eventCount, openDb } from "../storage/sqlite.js";
+import {
+	type DB,
+	eventCount,
+	hasEvolution,
+	insertEvolution,
+	openDb,
+} from "../storage/sqlite.js";
 
 function requireProject(): ChainLedger {
 	if (!existsSync(PATHS.currentYml())) {
@@ -40,7 +47,17 @@ function parseArtifact<T>(schema: z.ZodSchema<T>, raw: string): T {
 	return schema.parse(YAML.parse(raw));
 }
 
-export async function startMcpServer(): Promise<void> {
+export type CreatedMcpServer = {
+	server: McpServer;
+	/** Close the shared SQLite handle (call after transport disconnect). */
+	close: () => void;
+};
+
+/**
+ * Build a fully-registered MCP server without connecting a transport.
+ * Tests use InMemoryTransport; the CLI binds stdio via startMcpServer().
+ */
+export function createMcpServer(): CreatedMcpServer {
 	const server = new McpServer({
 		name: "inference-chain",
 		version: "0.2.0",
@@ -52,6 +69,13 @@ export async function startMcpServer(): Promise<void> {
 	const getDb = (): DB => {
 		if (!db) db = openDb(PATHS.db());
 		return db;
+	};
+
+	const close = () => {
+		if (db) {
+			db.close();
+			db = null;
+		}
 	};
 
 	server.tool(
@@ -151,6 +175,54 @@ export async function startMcpServer(): Promise<void> {
 	);
 
 	server.tool(
+		"chain_ingest_evolution",
+		"Validate and persist a hand-authored MemoryEvolutionRecord (kind: memory_evolution_record). Archives under evolutions/ and appends memory_evolution_created. Does not rewrite current.yml — use chain_evolve for the deterministic inbox merge path. Idempotent on record id.",
+		{
+			body: z.string().describe("YAML or JSON text of a MemoryEvolutionRecord"),
+		},
+		async ({ body }) => {
+			requireProject();
+			const parsed = parseArtifact(MemoryEvolutionRecordSchema, body);
+			const alreadyPresent = withLock(PATHS.ledgerLock(), () => {
+				const db = getDb();
+				const existed = hasEvolution(db, parsed.id);
+				writeFileAtomic(
+					ic("evolutions", `${parsed.id}.yml`),
+					YAML.stringify(parsed),
+				);
+				insertEvolution(db, {
+					id: parsed.id,
+					projectId: parsed.project_id,
+					fromIteration: parsed.from_iteration,
+					toIteration: parsed.to_iteration,
+					yaml: YAML.stringify(parsed),
+					createdAt: parsed.created_at,
+				});
+				if (!existed) {
+					appendChainEvent(db, {
+						projectId: parsed.project_id,
+						iteration: parsed.to_iteration,
+						type: "memory_evolution_created",
+						payload: { id: parsed.id, source: parsed.source, via: "mcp" },
+					});
+				}
+				return existed;
+			});
+			const note = alreadyPresent
+				? " (already present; archived copy refreshed)"
+				: "";
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Ingested MemoryEvolutionRecord ${parsed.id}${note}.`,
+					},
+				],
+			};
+		},
+	);
+
+	server.tool(
 		"chain_evolve",
 		"Apply the inbox brief or update to the current ledger. Emits a MemoryEvolutionRecord and advances iteration for SessionBriefs.",
 		{
@@ -232,16 +304,15 @@ export async function startMcpServer(): Promise<void> {
 		},
 	);
 
+	return { server, close };
+}
+
+export async function startMcpServer(): Promise<void> {
+	const { server, close } = createMcpServer();
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 
 	// Close the shared db handle when the transport detaches so file locks
 	// release cleanly. transport.onclose is part of the SDK contract.
-	const closeDb = () => {
-		if (db) {
-			db.close();
-			db = null;
-		}
-	};
-	transport.onclose = closeDb;
+	transport.onclose = close;
 }

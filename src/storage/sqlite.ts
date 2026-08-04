@@ -83,6 +83,11 @@ export function hasUpdate(db: DB, id: string): boolean {
 	);
 }
 
+export function hasEvolution(db: DB, id: string): boolean {
+	const row = db.prepare("SELECT 1 AS ok FROM evolutions WHERE id = ?").get(id);
+	return Boolean(row);
+}
+
 export function hasBrief(db: DB, id: string): boolean {
 	return db.prepare("SELECT 1 FROM briefs WHERE id = ?").get(id) !== undefined;
 }
