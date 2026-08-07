@@ -532,13 +532,31 @@ path, or absolute `--cwd`) because those files are committed and shared;
 always pinned. A failing adapter in a multi-target plan is reported and exits
 non-zero without aborting the remaining targets.
 
-Claude hooks (also mirrored conceptually on Codex/Grok):
+Claude hooks (also mirrored on Codex/Grok; bodies single-sourced from
+`src/integrations/shared/hooks.ts`):
 
-| Hook           | Behavior                                  |
-| -------------- | ----------------------------------------- |
-| `SessionStart` | Print or inject latest resume brief       |
-| `PreCompact`   | Remind user/agent to run `/ic-checkpoint` |
-| `Stop`         | Remind user/agent to run `/ic-stop`       |
+| Hook           | Behavior                                             |
+| -------------- | ---------------------------------------------------- |
+| `SessionStart` | Print or inject latest resume brief                  |
+| `PreCompact`   | `ic sync --quiet`, then remind about `/ic-checkpoint` |
+| `Stop`         | `ic sync --quiet`                                     |
+
+**`ic sync [--advance] [--quiet]`** — apply a pending inbox artifact
+(capture → evolve → archive) and regenerate the resume brief. A no-op when the
+inbox is empty, which is what makes it safe on a `Stop` hook that fires after
+every turn.
+
+This is what closes the n+1 loop. The hooks previously only *printed a
+reminder* to run three commands by hand, so the ledger advanced only when the
+user remembered — the capture step, on which the entire "sessions get sharper"
+promise depends, was the least reliable part of the system. Authoring the
+artifact still belongs to the agent (§7: no transcript capture); only the
+mechanical part is automated.
+
+`--quiet` makes it hook-safe: silent when idle or when the repo has no ledger
+at all, and never exits non-zero. A malformed artifact is reported on stderr as
+a single line and stays in the inbox for the next run rather than blocking the
+session or being silently dropped.
 
 **`ic ingest <file>`** — read YAML, detect artifact type, validate with Zod,
 store in SQLite, copy canonical file to `updates/|briefs/|evolutions/`, append

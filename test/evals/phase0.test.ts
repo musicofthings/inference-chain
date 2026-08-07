@@ -166,7 +166,9 @@ describe("phase0 eval: Claude install parity", () => {
 
 		installClaude({ overwrite: true, withMcp: true });
 		const refreshed = JSON.parse(readFileSync(settingsPath, "utf8"));
-		expect(refreshed.hooks.Stop[0].hooks[0].command).toContain("ic-stop");
+		expect(refreshed.hooks.Stop[0].hooks[0].command).toContain(
+			"ic sync --quiet",
+		);
 	});
 
 	it("writes full plugin command bodies (not stubs)", () => {

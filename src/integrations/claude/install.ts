@@ -4,46 +4,22 @@ import { TEMPLATE } from "../../storage/packageAssets.js";
 import { p } from "../../storage/paths.js";
 import { installClaudeStyleCommands } from "../shared/commands.js";
 import { copyTree } from "../shared/fs.js";
+import {
+	preCompactHookCommand,
+	sessionStartHookCommand,
+	syncHookCommand,
+} from "../shared/hooks.js";
 import { mcpJsonServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent } from "../shared/merge.js";
 import { writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-function desiredClaudeHooks(): Record<string, unknown> {
+function desiredClaudeHooks(pin?: boolean): Record<string, unknown> {
+	const hook = (command: string) => [{ hooks: [{ type: "command", command }] }];
 	return {
-		SessionStart: [
-			{
-				hooks: [
-					{
-						type: "command",
-						command:
-							"test -f .inference-chain/resumes/resume_latest.md && cat .inference-chain/resumes/resume_latest.md || true",
-					},
-				],
-			},
-		],
-		PreCompact: [
-			{
-				hooks: [
-					{
-						type: "command",
-						command:
-							'echo "[inference-chain] Consider /ic-checkpoint before compaction to preserve operating context."',
-					},
-				],
-			},
-		],
-		Stop: [
-			{
-				hooks: [
-					{
-						type: "command",
-						command:
-							'echo "[inference-chain] Consider /ic-stop to write a Session Brief, then: ic ingest .inference-chain/inbox/latest-brief.yml && ic evolve && ic resume"',
-					},
-				],
-			},
-		],
+		SessionStart: hook(sessionStartHookCommand()),
+		PreCompact: hook(preCompactHookCommand(pin)),
+		Stop: hook(syncHookCommand(pin)),
 	};
 }
 
@@ -72,7 +48,7 @@ export function installClaude(
 	const settingsPath = p(".claude", "settings.json");
 	const hooksMerged = mergeJsonKeyAbsent(
 		settingsPath,
-		{ hooks: desiredClaudeHooks() },
+		{ hooks: desiredClaudeHooks(opts.pinLaunch) },
 		{ overwrite, warnLabel: settingsPath },
 	);
 	if (hooksMerged) installed.push(".claude/settings.json");

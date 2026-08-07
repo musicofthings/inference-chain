@@ -11,7 +11,9 @@ This project maintains a forward-only inference ledger under `.inference-chain/`
 If `.inference-chain/resumes/resume_latest.md` exists, read it first and continue from the **current frontier**. Do not rediscover rejected hypotheses. Respect **do-not-repeat**.
 
 ## Mid-session
-On meaningful changes (or before context compaction), run `/ic-checkpoint` (or write `.inference-chain/inbox/latest-update.yml`), then ask the user to run `ic ingest … && ic evolve` (or use MCP `chain_ingest_update` + `chain_evolve`).
+On meaningful changes (or before context compaction), run `/ic-checkpoint` (or write `.inference-chain/inbox/latest-update.yml`), then run `ic sync` (or use MCP `chain_ingest_update` + `chain_evolve`).
 
 ## Session end
-Run `/ic-stop` (or write `.inference-chain/inbox/latest-brief.yml`), then `ic ingest … && ic evolve && ic resume` (or MCP `chain_ingest_brief` + `chain_evolve` + `chain_resume_brief`).
+Run `/ic-stop` (or write `.inference-chain/inbox/latest-brief.yml`), then run `ic sync` (or MCP `chain_ingest_brief` + `chain_evolve` + `chain_resume_brief`).
+
+`ic sync` applies whatever is in the inbox, advances the ledger, and regenerates the resume brief. It is a no-op on an empty inbox, so it is always safe to run.

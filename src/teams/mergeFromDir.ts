@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import YAML from "yaml";
-import { ZodError } from "zod";
+import { firstProblem } from "../core/errorMessage.js";
 import { renderResumeBrief } from "../core/resume.js";
 import { type ChainLedger, ChainLedgerSchema } from "../core/schemas.js";
 import {
@@ -30,16 +30,9 @@ export function loadDevLedger(path: string): ChainLedger {
 	try {
 		return ChainLedgerSchema.parse(YAML.parse(readFileSync(path, "utf8")));
 	} catch (err) {
-		// Surface a single actionable line naming the file and the first concrete
-		// problem, not a raw multi-line ZodError dump.
-		let reason: string;
-		if (err instanceof ZodError) {
-			const i = err.issues[0];
-			reason = `${i.path.join(".") || "(root)"}: ${i.message}`;
-		} else {
-			reason = err instanceof Error ? err.message.split("\n")[0] : String(err);
-		}
-		throw new Error(`Invalid developer ledger ${basename(path)}: ${reason}`);
+		throw new Error(
+			`Invalid developer ledger ${basename(path)}: ${firstProblem(err)}`,
+		);
 	}
 }
 

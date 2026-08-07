@@ -64,10 +64,14 @@ new_risks: []
 human_note: ""
 ```
 
-## After writing the file, tell the user
+## After writing the file
+
+Apply it with:
 
 ```text
-Run:
-  ic ingest .inference-chain/inbox/latest-update.yml
-  ic evolve
+ic sync
 ```
+
+Where a Stop hook is installed this happens on its own when the session ends,
+but a checkpoint is worth applying immediately — that is the point of taking
+one mid-session.

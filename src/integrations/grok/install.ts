@@ -1,5 +1,10 @@
 import { p } from "../../storage/paths.js";
 import { COMMON_COMMANDS, writeGrokSkillCommand } from "../shared/commands.js";
+import {
+	preCompactHookCommand,
+	sessionStartHookCommand,
+	syncHookCommand,
+} from "../shared/hooks.js";
 import { mcpSnippetNotes, mcpTomlSectionBody } from "../shared/mcp.js";
 import {
 	mergeJsonKeyAbsent,
@@ -9,42 +14,18 @@ import {
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-function desiredGrokHooks(): Record<string, unknown> {
+function desiredGrokHooks(pin?: boolean): Record<string, unknown> {
+	const hook = (command: string) => [{ hooks: [{ type: "command", command }] }];
 	return {
 		hooks: {
-			SessionStart: [
-				{
-					hooks: [
-						{
-							type: "command",
-							command:
-								"test -f .inference-chain/resumes/resume_latest.md && cat .inference-chain/resumes/resume_latest.md || true",
-						},
-					],
-				},
-			],
-			PreCompact: [
-				{
-					hooks: [
-						{
-							type: "command",
-							command:
-								'echo "[inference-chain] Consider /ic-checkpoint (skill) before compaction."',
-						},
-					],
-				},
-			],
-			Stop: [
-				{
-					hooks: [
-						{
-							type: "command",
-							command:
-								'echo "[inference-chain] Consider /ic-stop (skill), then: ic ingest .inference-chain/inbox/latest-brief.yml && ic evolve && ic resume"',
-						},
-					],
-				},
-			],
+			SessionStart: hook(sessionStartHookCommand()),
+			PreCompact: hook(
+				preCompactHookCommand(
+					pin,
+					"Consider /ic-checkpoint (skill) before compaction.",
+				),
+			),
+			Stop: hook(syncHookCommand(pin)),
 		},
 	};
 }
@@ -68,7 +49,7 @@ export function installGrok(opts: InstallOpts): InstallResult {
 
 	const hooksPath = p(".grok", "hooks", "inference-chain.json");
 	if (
-		mergeJsonKeyAbsent(hooksPath, desiredGrokHooks(), {
+		mergeJsonKeyAbsent(hooksPath, desiredGrokHooks(opts.pinLaunch), {
 			overwrite: opts.overwrite,
 			warnLabel: hooksPath,
 		})

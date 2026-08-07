@@ -108,30 +108,21 @@ ic init --project-name "My Project" --force
 
 **Mid-session checkpoint (interaction-level evolution):**
 
-In Claude Code:
 ```text
-/ic-checkpoint
-```
-
-In your terminal:
-```bash
-ic ingest .inference-chain/inbox/latest-update.yml
-ic evolve
+/ic-checkpoint     # agent writes .inference-chain/inbox/latest-update.yml
+ic sync            # apply it and refresh the resume brief
 ```
 
 **End of session (session-level handoff):**
 
-In Claude Code:
 ```text
-/ic-stop
+/ic-stop           # agent writes .inference-chain/inbox/latest-brief.yml
 ```
 
-In your terminal:
-```bash
-ic ingest .inference-chain/inbox/latest-brief.yml
-ic evolve
-ic resume
-```
+On hosts with hooks (Claude Code, Codex, Grok) the `Stop` hook runs `ic sync`
+for you, so the ledger advances and the next session's resume brief is written
+without anyone typing a command. Writing the artifact is the only step that
+needs judgement — and that stays with the agent.
 
 **Resume next time** — `/ic-resume` reads
 `.inference-chain/resumes/resume_latest.md` and continues from the current
@@ -147,6 +138,7 @@ frontier without rediscovering rejected hypotheses.
 | `ic ingest <file>`              | Validate + store an artifact (routes by `kind`; idempotent on id) |
 | `ic evolve [--advance]`         | Apply latest brief/update under the ledger lock           |
 | `ic resume [--silent]`          | Generate `resumes/resume_latest.md`                        |
+| `ic sync [--advance] [--quiet]` | Apply a pending inbox artifact + refresh the resume brief; no-op when idle |
 | `ic status`                     | Show iteration, event count, ledger sizes, score          |
 | `ic doctor [--json] [--strict]` | Check init, ledger, hosts, and adapter wiring             |
 | `ic verify`                     | Replay hash chain; SQLite parity; `current.yml` tip check |

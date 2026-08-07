@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { nanoid } from "nanoid";
 import YAML from "yaml";
 import { initProject } from "./core/bootstrap.js";
+import { firstProblem } from "./core/errorMessage.js";
 import { scoreLedger } from "./core/evolve.js";
 import { renderResumeBrief } from "./core/resume.js";
 import {
@@ -498,27 +499,82 @@ program
 		}
 	});
 
+function regenerateResume(): string {
+	const ledger = loadCurrent();
+	const text = renderResumeBrief(ledger);
+	writeFileAtomic(PATHS.resumeLatest(), text);
+
+	const db = openProjectDb();
+	try {
+		appendChainEvent(db, {
+			projectId: ledger.project_id,
+			iteration: ledger.iteration,
+			type: "resume_brief_generated",
+			payload: { iteration: ledger.iteration },
+		});
+	} finally {
+		db.close();
+	}
+	return text;
+}
+
 program
 	.command("resume")
 	.option("--silent", "Do not print to stdout")
 	.action(({ silent }: { silent?: boolean }) => {
-		const ledger = loadCurrent();
-		const text = renderResumeBrief(ledger);
-		writeFileAtomic(PATHS.resumeLatest(), text);
+		const text = regenerateResume();
+		if (!silent) console.log(text);
+	});
+
+program
+	.command("sync")
+	.description(
+		"Apply a pending inbox artifact and regenerate the resume brief. No-op when the inbox is empty.",
+	)
+	.option(
+		"--advance",
+		"Increment iteration even when applying an InteractionUpdate",
+	)
+	.option(
+		"--quiet",
+		"Print only when work was done, and never exit non-zero (for hook use)",
+	)
+	.action((opts: { advance?: boolean; quiet?: boolean }) => {
+		const quiet = Boolean(opts.quiet);
+
+		// Hooks fire in every repo the user opens, most of which have no ledger.
+		if (!existsSync(PATHS.currentYml())) {
+			if (quiet) return;
+			console.error('No .inference-chain/ project here. Run "ic init" first.');
+			process.exitCode = 1;
+			return;
+		}
+
+		if (!existsSync(PATHS.inboxBrief()) && !existsSync(PATHS.inboxUpdate())) {
+			if (!quiet) console.log("Nothing to sync — inbox is empty.");
+			return;
+		}
 
 		const db = openProjectDb();
 		try {
-			appendChainEvent(db, {
-				projectId: ledger.project_id,
-				iteration: ledger.iteration,
-				type: "resume_brief_generated",
-				payload: { iteration: ledger.iteration },
+			const outcome = evolveFromInbox({
+				db,
+				advance: opts.advance,
+				via: "sync",
 			});
+			const text = regenerateResume();
+			console.log(
+				`[inference-chain] iteration ${outcome.record.from_iteration} → ${outcome.record.to_iteration}, score ${outcome.scoreBefore} → ${outcome.scoreAfter}. Resume brief refreshed.`,
+			);
+			if (!quiet) console.log(`\n${text}`);
+		} catch (err) {
+			// The artifact stays in the inbox, so the next sync retries it. A hook
+			// must surface the problem without blocking the session on it.
+			console.error(`[inference-chain] sync failed: ${firstProblem(err)}`);
+			if (!quiet) process.exitCode = 1;
 		} finally {
 			db.close();
 		}
-
-		if (!silent) console.log(text);
 	});
 
 program.command("status").action(() => {

@@ -1,4 +1,9 @@
 import { p } from "../../storage/paths.js";
+import {
+	preCompactHookCommand,
+	sessionStartHookCommand,
+	syncHookCommand,
+} from "../shared/hooks.js";
 import { mcpSnippetNotes, mcpTomlSectionBody } from "../shared/mcp.js";
 import {
 	mergeJsonKeyAbsent,
@@ -8,7 +13,8 @@ import {
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-function desiredCodexHooks(): Record<string, unknown> {
+function desiredCodexHooks(pin?: boolean): Record<string, unknown> {
+	const hook = (command: string) => [{ hooks: [{ type: "command", command }] }];
 	return {
 		description: "Inference Chain lifecycle hooks",
 		hooks: {
@@ -18,35 +24,20 @@ function desiredCodexHooks(): Record<string, unknown> {
 					hooks: [
 						{
 							type: "command",
-							command:
-								"test -f .inference-chain/resumes/resume_latest.md && cat .inference-chain/resumes/resume_latest.md || true",
+							command: sessionStartHookCommand(),
 							statusMessage: "Loading Inference Chain resume brief",
 						},
 					],
 				},
 			],
-			PreCompact: [
-				{
-					hooks: [
-						{
-							type: "command",
-							command:
-								'echo "[inference-chain] Consider writing .inference-chain/inbox/latest-update.yml before compaction, then: ic ingest .inference-chain/inbox/latest-update.yml && ic evolve"',
-						},
-					],
-				},
-			],
-			Stop: [
-				{
-					hooks: [
-						{
-							type: "command",
-							command:
-								'echo "[inference-chain] Consider writing a Session Brief to .inference-chain/inbox/latest-brief.yml, then: ic ingest .inference-chain/inbox/latest-brief.yml && ic evolve && ic resume"',
-						},
-					],
-				},
-			],
+			// Codex has no slash commands, so the nudge names the artifact path.
+			PreCompact: hook(
+				preCompactHookCommand(
+					pin,
+					"Consider writing .inference-chain/inbox/latest-update.yml before compaction.",
+				),
+			),
+			Stop: hook(syncHookCommand(pin)),
 		},
 	};
 }
@@ -63,7 +54,7 @@ export function installCodex(opts: InstallOpts): InstallResult {
 
 	const hooksPath = p(".codex", "hooks.json");
 	if (
-		mergeJsonKeyAbsent(hooksPath, desiredCodexHooks(), {
+		mergeJsonKeyAbsent(hooksPath, desiredCodexHooks(opts.pinLaunch), {
 			overwrite: opts.overwrite,
 			warnLabel: hooksPath,
 		})

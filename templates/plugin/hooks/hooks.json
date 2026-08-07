@@ -14,7 +14,7 @@
 			"hooks": [
 				{
 					"type": "command",
-					"command": "echo '[inference-chain] Consider /ic-checkpoint before compaction to preserve operating context.'"
+					"command": "ic sync --quiet || true; echo '[inference-chain] Consider /ic-checkpoint before compaction to preserve operating context.'"
 				}
 			]
 		}
@@ -24,7 +24,7 @@
 			"hooks": [
 				{
 					"type": "command",
-					"command": "echo '[inference-chain] Consider /ic-stop to write a Session Brief, then: ic ingest .inference-chain/inbox/latest-brief.yml && ic evolve && ic resume'"
+					"command": "ic sync --quiet || true"
 				}
 			]
 		}

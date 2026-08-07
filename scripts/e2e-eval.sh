@@ -248,7 +248,52 @@ expect_exit 0 "ic install --target desktop --no-with-mcp" install --target deskt
 check "--no-with-mcp writes no snippet" '[ ! -f .inference-chain/mcp-desktop.json ]'
 
 ################################################################################
-section "11. MCP server handshake over stdio"
+section "11. capture loop closes without manual commands"
+newproject
+expect_exit 0 "ic init" init --project-name "LoopEval"
+expect_exit 0 "ic install --target claude" install --target claude
+check "Stop hook runs sync" 'grep -q "ic sync --quiet" .claude/settings.json'
+check "PreCompact hook runs sync" 'grep -q "ic sync --quiet" .claude/settings.json'
+expect_exit 0 "ic sync on empty inbox" sync
+check_log "empty inbox is a no-op" 'Nothing to sync'
+assert_sandboxed
+cat >.inference-chain/inbox/latest-brief.yml <<'BRIEF'
+kind: session_brief
+schema_version: "1.0.0"
+id: brf_loop_eval
+project_id: LoopEval
+iteration: 0
+created_at: "2026-06-01T00:00:00Z"
+session_intent:
+  primary_goal: "close the loop"
+  what_agent_was_doing: "writing a brief"
+working_theory:
+  summary: "the stop hook applies the brief with no human commands"
+  confidence: high
+actions_attempted: []
+outcomes_observed: []
+worked:
+  - "hook-driven ledger advance"
+did_not_work: []
+partially_worked: []
+issues_identified: []
+fixes_attempted: []
+unresolved_state: ""
+next_best_action:
+  - "measure it"
+do_not_repeat: []
+user_constraints: []
+human_handoff_summary: "loop closed"
+BRIEF
+# Exactly what the Stop hook runs.
+expect_exit 0 "ic sync --quiet applies the brief" sync --quiet
+check "inbox consumed" '[ ! -f .inference-chain/inbox/latest-brief.yml ]'
+check "brief archived" '[ -f .inference-chain/briefs/brf_loop_eval.yml ]'
+check "resume brief refreshed" 'grep -q "hook-driven ledger advance" .inference-chain/resumes/resume_latest.md'
+expect_exit 0 "ledger still verifies" verify
+
+################################################################################
+section "12. MCP server handshake over stdio"
 newproject
 MCPDIR=$NEWDIR
 expect_exit 0 "ic init" init --project-name "McpEval"

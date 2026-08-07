@@ -73,11 +73,14 @@ new_risks: []
 human_handoff_summary: "<3-6 sentences a senior dev would write in a handoff>"
 ```
 
-## After writing the file, tell the user
+## After writing the file
+
+Where a Stop hook is installed, the brief is applied automatically when the
+session ends — the ledger advances and the resume brief for the next session is
+regenerated. Nothing further is required.
+
+If the host has no hooks, tell the user to run:
 
 ```text
-Run:
-  ic ingest .inference-chain/inbox/latest-brief.yml
-  ic evolve
-  ic resume
+ic sync
 ```
