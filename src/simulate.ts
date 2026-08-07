@@ -113,10 +113,22 @@ function color(
 	return `\x1b[${codes[c]}m${s}\x1b[0m`;
 }
 
+/**
+ * Artifacts carry their own project_id and ingest rejects a mismatch, so a
+ * fixed default would break every scenario not named after it.
+ */
+function projectIdOf(dirAbs: string, file: string): string | undefined {
+	const raw = YAML.parse(readFileSync(join(dirAbs, file), "utf8")) as {
+		project_id?: string;
+	};
+	return raw?.project_id;
+}
+
 export async function runSimulation(opts: {
 	dir: string;
 	reset: boolean;
-	projectName: string;
+	/** Defaults to the project_id of the first artifact in the scenario. */
+	projectName?: string;
 	jsonOnly: boolean;
 }): Promise<SimulationReport> {
 	const dirAbs = resolve(opts.dir);
@@ -131,7 +143,9 @@ export async function runSimulation(opts: {
 	}
 
 	if (opts.reset) {
-		initFresh(opts.projectName);
+		initFresh(
+			opts.projectName ?? projectIdOf(dirAbs, files[0]) ?? "simulation",
+		);
 	} else if (!existsSync(PATHS.currentYml())) {
 		throw new Error(
 			"simulate: no existing .inference-chain/ project found in cwd. Pass --reset to start fresh.",

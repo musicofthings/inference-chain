@@ -4,6 +4,27 @@
 	"description": "Inference Chain — A Forward Inference Ledger for Claude Code",
 	"type": "module",
 	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/musicofthings/inference-chain.git"
+	},
+	"homepage": "https://github.com/musicofthings/inference-chain#readme",
+	"bugs": {
+		"url": "https://github.com/musicofthings/inference-chain/issues"
+	},
+	"keywords": [
+		"claude-code",
+		"coding-agent",
+		"context-engineering",
+		"agent-memory",
+		"mcp",
+		"session-handoff",
+		"cli"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"packageManager": "pnpm@10.33.4",
 	"bin": {
 		"ic": "./dist/cli.js"
 	},
@@ -23,6 +44,8 @@
 		"dev": "tsx src/cli.ts",
 		"test": "vitest run",
 		"eval:e2e": "pnpm build && bash scripts/e2e-eval.sh",
+		"eval:sim": "pnpm build && bash scripts/sim-eval.sh",
+		"prepublishOnly": "pnpm build",
 		"lint": "biome check .",
 		"format": "biome format --write ."
 	},

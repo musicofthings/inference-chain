@@ -581,14 +581,13 @@ program
 	.option("--reset", "Wipe .inference-chain/ and re-init before running")
 	.option(
 		"--project-name <name>",
-		"Project name to use on --reset",
-		"simulation",
+		"Project name to use on --reset (default: project_id of the first artifact)",
 	)
 	.option("--json", "Emit final report as JSON only")
 	.action(
 		async (
 			dir: string,
-			opts: { reset?: boolean; projectName: string; json?: boolean },
+			opts: { reset?: boolean; projectName?: string; json?: boolean },
 		) => {
 			const { runSimulation } = await import("./simulate.js");
 			await runSimulation({

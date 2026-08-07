@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      # better-sqlite3 compiles a native addon; pnpm 10 gates build scripts
+      # behind onlyBuiltDependencies in pnpm-workspace.yaml.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm test
+
+      # Drives the built dist/cli.js through init/install/doctor/ledger/MCP in
+      # throwaway dirs — catches wiring regressions unit tests cannot see.
+      - run: pnpm eval:e2e
+
+      # The n+1 claim is a product promise; regressions here are silent.
+      - name: n+1 sharpness regression
+        run: pnpm eval:sim
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Fails the build if dist/ or templates/ would be missing from the
+      # published tarball — the CLI cannot resolve templates without them.
+      - name: verify publish tarball contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "
+            const files = JSON.parse(require('fs').readFileSync('pack.json','utf8'))[0].files.map(f => f.path);
+            const need = ['dist/cli.js', 'templates/common/commands/ic-checkpoint.md', 'templates/common/prompts/resume-session.md', 'README.md', 'LICENSE'];
+            const missing = need.filter(n => !files.includes(n));
+            if (missing.length) { console.error('missing from tarball:', missing); process.exit(1); }
+            console.log('tarball ok:', files.length, 'files');
+          "

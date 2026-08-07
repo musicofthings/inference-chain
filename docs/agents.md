@@ -266,3 +266,10 @@ to retain the temp projects.
 Every CLI invocation is preceded by an `assert_sandboxed` check that aborts if
 the working directory is inside this repo, so a failed `cd` can never run
 `ic install --all` against the source tree.
+
+`pnpm eval:sim` (`scripts/sim-eval.sh`) replays every scenario under
+`examples/*/*/sessions` and fails if any stops being n+1-positive (PRD-TRD §22).
+
+CI (`.github/workflows/ci.yml`) runs lint, build, unit tests, and both evals on
+Node 20 and 22, plus a tarball check that the published package still contains
+`dist/` and `templates/`.

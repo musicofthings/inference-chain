@@ -58,18 +58,28 @@ flowchart TD
 
 ## Quickstart
 
-Requires **Node.js ≥ 20** and **pnpm**.
+Requires **Node.js ≥ 20**.
 
 ```bash
-pnpm install
-pnpm build
-pnpm link --global
+npm i -g inference-chain          # puts `ic` on PATH
 
 cd /path/to/your/project
 ic init --project-name "My Project"
 ic install --target claude   # or: --all | --detect | --target cursor,vscode
 # alias: ic install-claude
 ```
+
+From a clone (development, or before the package is published):
+
+```bash
+pnpm install
+pnpm build
+pnpm link --global
+```
+
+Generated MCP config invokes `ic`, so it needs to resolve on PATH for whoever
+opens the repo. `ic doctor` reports how the launch resolves; `ic install
+--pin-launch` writes machine-local absolute paths instead.
 
 `ic install --target claude` will:
 1. Write slash commands to `.claude/commands/ic-*.md` from
