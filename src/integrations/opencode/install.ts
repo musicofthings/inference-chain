@@ -1,4 +1,5 @@
 import { p } from "../../storage/paths.js";
+import { installDescriptionOnlyCommands } from "../shared/commands.js";
 import { mcpOpencodeServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent, upsertAgentsMdBlock } from "../shared/merge.js";
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
@@ -14,6 +15,11 @@ export function installOpencode(opts: InstallOpts): InstallResult {
 	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
 	}
+
+	installDescriptionOnlyCommands(p(".opencode", "commands"), {
+		overwrite: opts.overwrite,
+		installed,
+	});
 
 	if (opts.withMcp) {
 		const configPath = p("opencode.json");

@@ -15,7 +15,7 @@ Targets:
 | --- | --- |
 | First-class (commands/hooks) | `claude`, `codex`, `gemini`, `grok`, `cursor`, `openhands` |
 | Portable / Desktop | `generic`, `desktop` |
-| Thin IDE adapters | `copilot`, `vscode`, `opencode`, `chatgpt`, `windsurf`, `continue` |
+| IDE adapters | `copilot`, `vscode`, `opencode`, `chatgpt`, `windsurf`, `continue` |
 | Plan aliases | `all`, `detect` (same as `--all` / `--detect`) |
 
 `ic install-claude` is an alias for `--target claude`. MCP project config is
@@ -59,17 +59,35 @@ Shared prompts live in `templates/common/prompts/` and are copied into
 `.inference-chain/prompts/` by `ic init` and every adapter install.
 
 Shared slash/skill command **bodies** live in `templates/common/commands/` and
-are wrapped with host-specific frontmatter at install time (Claude/Cursor md,
-Gemini toml, Grok skills).
+are wrapped with host-specific frontmatter at install time. Every host with a
+project-scoped command surface gets all four (`/ic-checkpoint`, `/ic-stop`,
+`/ic-evolve`, `/ic-resume`) from the same bodies:
+
+| Host | Command surface |
+| --- | --- |
+| `claude` | `.claude/commands/ic-*.md` |
+| `cursor` | `.cursor/commands/ic-*.md` |
+| `gemini` | `.gemini/commands/ic-*.toml` |
+| `grok` | `.grok/skills/ic-*/SKILL.md` |
+| `copilot`, `vscode` | `.github/prompts/ic-*.prompt.md` |
+| `opencode` | `.opencode/commands/ic-*.md` |
+| `windsurf` | `.windsurf/workflows/ic-*.md` |
+
+`codex`, `openhands`, `chatgpt`, `desktop` and `generic` have no project-scoped
+command surface and reach the same operations through MCP tools. `continue` is
+in that group deliberately: its project prompt-file format has moved more than
+once, and guessing at it would write files the host ignores.
 
 ## Manual fallback (any agent)
 
 ```bash
 # write inbox YAML using .inference-chain/prompts/*
-ic ingest .inference-chain/inbox/latest-update.yml   # or latest-brief.yml
-ic evolve
-ic resume
+ic sync
 ```
+
+`ic sync` applies whatever is in the inbox (capture → evolve → archive) and
+regenerates the resume brief. On hosts with hooks (`claude`, `codex`, `grok`)
+the `Stop` hook already runs it, so this is only needed elsewhere.
 
 Or drive the same loop via `ic mcp` tools: `chain_ingest_update` /
 `chain_ingest_brief`, `chain_ingest_evolution`, `chain_evolve`,

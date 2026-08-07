@@ -163,6 +163,35 @@ export function writeGrokSkillCommand(
 	);
 }
 
+/**
+ * Install all four commands as description-only markdown.
+ *
+ * Copilot/VS Code prompt files (`.github/prompts/<name>.prompt.md`), OpenCode
+ * commands (`.opencode/commands/<name>.md`) and Windsurf workflows
+ * (`.windsurf/workflows/<name>.md`) all share this shape, differing only in
+ * directory and extension.
+ */
+export function installDescriptionOnlyCommands(
+	destDir: string,
+	opts: {
+		overwrite: boolean;
+		installed: string[];
+		cwd?: string;
+		/** Defaults to ".md"; Copilot/VS Code need ".prompt.md". */
+		extension?: string;
+	},
+): string[] {
+	const ext = opts.extension ?? ".md";
+	const written: string[] = [];
+	for (const name of COMMON_COMMANDS) {
+		const dest = join(destDir, `${name}${ext}`);
+		if (writeCursorMarkdownCommand(dest, name, opts)) {
+			written.push(`${name}${ext}`);
+		}
+	}
+	return written;
+}
+
 /** Install all four Claude-style commands into a directory. */
 export function installClaudeStyleCommands(
 	destDir: string,

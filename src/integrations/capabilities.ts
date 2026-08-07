@@ -76,21 +76,23 @@ export const HOST_CAPABILITIES: Record<AgentTarget, HostCapabilities> = {
 		agentsMd: false,
 	},
 	copilot: {
-		commands: false,
+		// .github/prompts/*.prompt.md
+		commands: true,
 		hooks: false,
 		rules: true,
 		mcp: true,
 		agentsMd: true,
 	},
 	vscode: {
-		commands: false,
+		commands: true,
 		hooks: false,
 		rules: false,
 		mcp: true,
 		agentsMd: true,
 	},
 	opencode: {
-		commands: false,
+		// .opencode/commands/*.md
+		commands: true,
 		hooks: false,
 		rules: false,
 		mcp: true,
@@ -104,13 +106,16 @@ export const HOST_CAPABILITIES: Record<AgentTarget, HostCapabilities> = {
 		agentsMd: true,
 	},
 	windsurf: {
-		commands: false,
+		// .windsurf/workflows/*.md
+		commands: true,
 		hooks: false,
 		rules: true,
 		mcp: true,
 		agentsMd: true,
 	},
 	continue: {
+		// Continue's project prompt-file format has moved around (.prompt files,
+		// then the hub); left on MCP + AGENTS.md rather than guess at it.
 		commands: false,
 		hooks: false,
 		rules: false,

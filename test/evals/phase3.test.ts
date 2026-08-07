@@ -143,10 +143,21 @@ describe("phase3 eval: capability parity", () => {
 			.filter(([, c]) => c.commands)
 			.map(([t]) => t);
 		expect(withCommands.sort()).toEqual(
-			["claude", "cursor", "gemini", "grok"].sort(),
+			[
+				"claude",
+				"cursor",
+				"gemini",
+				"grok",
+				"copilot",
+				"vscode",
+				"opencode",
+				"windsurf",
+			].sort(),
 		);
 
-		expect(formatCapabilities(HOST_CAPABILITIES.vscode)).toBe("mcp+AGENTS.md");
+		expect(formatCapabilities(HOST_CAPABILITIES.vscode)).toBe(
+			"commands+mcp+AGENTS.md",
+		);
 		expect(formatCapabilities(HOST_CAPABILITIES.cursor)).toBe(
 			"commands+rules+mcp",
 		);

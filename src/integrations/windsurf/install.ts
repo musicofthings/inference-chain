@@ -1,4 +1,5 @@
 import { p } from "../../storage/paths.js";
+import { installDescriptionOnlyCommands } from "../shared/commands.js";
 import {
 	mcpDesktopConfigSnippet,
 	mcpJsonServerEntry,
@@ -24,6 +25,13 @@ export function installWindsurf(opts: InstallOpts): InstallResult {
 	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
 	}
+
+	// Cascade workflows: `/ic-stop` etc. Manual-only by design, which suits
+	// commands that should fire when the user decides a session is done.
+	installDescriptionOnlyCommands(p(".windsurf", "workflows"), {
+		overwrite: opts.overwrite,
+		installed,
+	});
 
 	if (opts.withMcp) {
 		const mcpPath = p(".windsurf", "mcp.json");
