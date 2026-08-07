@@ -23,15 +23,33 @@ merged by default; pass `--no-with-mcp` to skip. Use `--overwrite` to replace
 existing adapter files (host keys already present are still preserved unless
 overwrite is set for that file’s merge path).
 
+### MCP launch: portable by default
+
+Project-scoped MCP config (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`,
+`opencode.json`, `.continue/config.json`, `.windsurf/mcp.json`, `.codex/config.toml`,
+…) gets committed and shared, so it is written as `ic mcp` with no absolute
+paths — the host already starts the stdio server with the project as cwd. The
+CLI must therefore be on PATH (`npm i -g inference-chain`).
+
+Pass **`--pin-launch`** to write this machine's node binary, CLI path, and
+absolute `--cwd` instead. That config is machine-local; do not commit it.
+
+The `desktop` / `chatgpt` snippets are always pinned, since a Desktop app has no
+project context to inherit.
+
 ### Multi-host install
 
 - **`--all`** installs the curated set in `ALL_INSTALL_TARGETS` (first-class +
   generic + desktop + thin IDE adapters). Skips `chatgpt` (use
   `--target chatgpt` or `codex` + `desktop`). Never runs `ic teams init`.
-- **`--detect`** scans for host markers (`.claude/`, `.cursor/`, `.vscode/`,
-  `opencode.json`, …). If none match, falls back to `generic`.
+- **`--detect`** scans for host markers (`.claude/`, `.cursor/`,
+  `.vscode/mcp.json`, `opencode.json`, …). If none match, falls back to
+  `generic`. Bare `.vscode/` is deliberately not a marker — nearly every repo
+  has one for editor settings; select `vscode` explicitly instead.
 - **`--target claude,cursor`** installs only the listed adapters.
 - Use only one of `--target` / `--all` / `--detect`.
+- A failing adapter does not abort the rest of the plan: the remaining targets
+  still install, failures are reported per target, and the command exits 1.
 
 Adapters only wire surfaces the host actually has (see
 `src/integrations/capabilities.ts`): slash/skills/hooks where supported;
@@ -156,7 +174,7 @@ Merge into `claude_desktop_config.json`. Does not edit global app configs.
 
 | Writes | Purpose |
 | --- | --- |
-| `.github/copilot-instructions.md` | Repo-wide Copilot instructions |
+| `.github/copilot-instructions.md` marker block | Repo-wide Copilot instructions |
 | `AGENTS.md` marker block | Coding-agent instructions |
 | `.vscode/mcp.json` | VS Code / Copilot Chat MCP (default) |
 
@@ -185,7 +203,7 @@ Merge into `claude_desktop_config.json`. Does not edit global app configs.
 
 | Writes | Purpose |
 | --- | --- |
-| `.windsurfrules` | Cascade rules (AGENTS body) |
+| `.windsurfrules` marker block | Cascade rules (AGENTS body) |
 | `AGENTS.md` marker block | Shared instructions |
 | `.windsurf/mcp.json` | MCP (default) |
 
@@ -202,11 +220,24 @@ Adapters live under `src/integrations/<target>/` and register in
 `src/integrations/registry.ts`. Each implements:
 
 ```ts
-install(opts: { overwrite: boolean; withMcp: boolean }): InstallResult
+install(opts: {
+  overwrite: boolean;
+  withMcp: boolean;
+  pinLaunch?: boolean;
+}): InstallResult
 ```
 
 They must not touch the ledger, hash chain, or `evolveLedger` purity. Shared
 helpers: `src/integrations/shared/{fs,merge,mcp,prompts,commands}.ts`.
+
+Two rules keep installs non-destructive:
+
+- Files the user is likely to have authored (`AGENTS.md`,
+  `.github/copilot-instructions.md`, `.windsurfrules`) get an
+  `upsertAgentsMdBlock` marker block, never a whole-file write — including
+  under `--overwrite`.
+- Files we own are written through `writeManagedFile` / `copyOne`, which
+  preserve existing content unless `--overwrite` is set.
 
 ## Evals
 
@@ -217,5 +248,9 @@ Phase acceptance tests live under `test/evals/`:
 - `phase2.test.ts` — thin IDE adapters
 - `phase3.test.ts` — `--all` / `--detect` / multi-target + capability matrix
 - `phase4.test.ts` — `ic doctor` + MCP `chain_ingest_evolution`
+
+`test/installHardening.test.ts` guards the non-negotiables: project MCP config
+contains no machine-specific paths, `--overwrite` never eats hand-authored
+instruction files, and a failing adapter does not sink a multi-target install.
 
 Run: `pnpm test`.

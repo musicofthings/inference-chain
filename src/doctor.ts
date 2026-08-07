@@ -23,8 +23,7 @@ export type DoctorCheck = {
 
 export type DoctorReport = {
 	cwd: string;
-	ok: boolean;
-	/** True when no fail checks (warns allowed). */
+	/** True when there are no fail checks (warns allowed unless strict). */
 	healthy: boolean;
 	checks: DoctorCheck[];
 	detected: AgentTarget[];
@@ -41,6 +40,8 @@ export type DoctorOpts = {
 export function runDoctor(opts: DoctorOpts = {}): DoctorReport {
 	const cwd = resolve(opts.cwd ?? process.cwd());
 	const prevCwd = process.cwd();
+	// PATHS and verifyLedger resolve against process.cwd(), so an explicit cwd
+	// has to be applied globally for the duration of the run.
 	if (cwd !== prevCwd) process.chdir(cwd);
 	try {
 		return runDoctorInCwd(cwd, opts.strict);
@@ -73,11 +74,8 @@ function runDoctorInCwd(cwd: string, strict?: boolean): DoctorReport {
 	checks.push({
 		id: "launch",
 		status: "ok",
-		message: `MCP launch resolves to: ${launchCmd} mcp --cwd <project>`,
-		hint:
-			launch.command === "ic"
-				? "Ensure `ic` is on PATH, or run install via the packaged CLI so configs pin node + dist/cli.js."
-				: undefined,
+		message: `Project MCP config uses \`ic mcp\`; pinned launch would be: ${launchCmd} mcp --cwd <project>`,
+		hint: "Ensure `ic` is on PATH (npm i -g inference-chain), or re-run install with --pin-launch for a machine-local config.",
 	});
 
 	if (initialized && existsSync(PATHS.ledgerJsonl())) {
@@ -179,7 +177,6 @@ function runDoctorInCwd(cwd: string, strict?: boolean): DoctorReport {
 
 	return {
 		cwd,
-		ok: healthy,
 		healthy,
 		checks,
 		detected: detectedTargets,

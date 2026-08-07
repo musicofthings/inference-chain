@@ -1,6 +1,6 @@
-import { writeFileSync } from "node:fs";
 import { p } from "../../storage/paths.js";
 import { installCodex } from "../codex/install.js";
+import { writeManagedFile } from "../shared/fs.js";
 import { mcpDesktopConfigSnippet, mcpSnippetNotes } from "../shared/mcp.js";
 import { writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
@@ -21,14 +21,17 @@ export function installChatgpt(opts: InstallOpts): InstallResult {
 	}
 	notes.push(...codex.notes);
 
-	const snippetPath = p(".inference-chain", "mcp-chatgpt-desktop.json");
-	const snippet = mcpDesktopConfigSnippet();
-	writeFileSync(snippetPath, `${snippet}\n`, "utf8");
-	if (!installed.includes(".inference-chain/mcp-chatgpt-desktop.json")) {
-		installed.push(".inference-chain/mcp-chatgpt-desktop.json");
+	if (opts.withMcp) {
+		const snippet = mcpDesktopConfigSnippet();
+		writeManagedFile(
+			p(".inference-chain", "mcp-chatgpt-desktop.json"),
+			`${snippet}\n`,
+			opts.overwrite,
+			installed,
+		);
+		notes.push(...mcpSnippetNotes("chatgpt"));
+		notes.push(snippet);
 	}
-	notes.push(...mcpSnippetNotes("chatgpt"));
-	notes.push(snippet);
 
 	return { target: "chatgpt", installed, notes };
 }

@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { templatesRoot } from "../../storage/packageAssets.js";
-import { copyOne } from "./fs.js";
 
 export const COMMON_COMMANDS = [
 	"ic-checkpoint",
@@ -60,11 +59,11 @@ function writeIfChanged(
 	installed: string[],
 	cwd: string,
 ): boolean {
-	if (existsSync(dest) && !overwrite) return false;
-	mkdirSync(dirname(dest), { recursive: true });
-	if (existsSync(dest) && readFileSync(dest, "utf8") === content) {
-		return false;
+	if (existsSync(dest)) {
+		if (readFileSync(dest, "utf8") === content) return false;
+		if (!overwrite) return false;
 	}
+	mkdirSync(dirname(dest), { recursive: true });
 	writeFileSync(dest, content, "utf8");
 	installed.push(relative(cwd, dest) || dest);
 	return true;
@@ -177,15 +176,4 @@ export function installClaudeStyleCommands(
 		}
 	}
 	return written;
-}
-
-/** Copy optional host-only extras (e.g. Cursor rules) without touching commands. */
-export function copyHostExtra(
-	src: string,
-	dest: string,
-	overwrite: boolean,
-	installed: string[],
-	cwd: string = process.cwd(),
-): boolean {
-	return copyOne(src, dest, overwrite, installed, cwd);
 }

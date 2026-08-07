@@ -25,6 +25,7 @@ import {
 	installAgent,
 	installAgents,
 } from "./integrations/registry.js";
+import { projectLaunchNote } from "./integrations/shared/mcp.js";
 import { planFromFlags } from "./integrations/targets.js";
 import { installTeams } from "./integrations/teams/install.js";
 import type { AgentTarget } from "./integrations/types.js";
@@ -108,6 +109,7 @@ function printInstallResult(
 		settingsPath?: string;
 		pluginInstalled?: boolean;
 	},
+	extraNotes: string[] = [],
 ): void {
 	console.log(`Installed Inference Chain adapter: ${target}`);
 	if (res.installedCommands) {
@@ -132,7 +134,7 @@ function printInstallResult(
 	} else {
 		console.log("No new files written (existing files preserved).");
 	}
-	for (const note of res.notes) {
+	for (const note of [...res.notes, ...extraNotes]) {
 		console.log(`Note: ${note}`);
 	}
 }
@@ -147,15 +149,24 @@ function warnIfLedgerMissing(): void {
 
 function printMultiInstall(
 	planLabel: string,
-	targets: AgentTarget[],
-	res: { installed: string[]; notes: string[] },
+	res: {
+		installed: string[];
+		notes: string[];
+		succeeded: AgentTarget[];
+		failures: { target: AgentTarget; error: string }[];
+	},
 	extraNotes: string[] = [],
 ): void {
 	console.log(
-		`Installed Inference Chain adapters (${planLabel}): ${targets.join(", ")}`,
+		`Installed Inference Chain adapters (${planLabel}): ${
+			res.succeeded.join(", ") || "(none)"
+		}`,
 	);
-	for (const t of targets) {
+	for (const t of res.succeeded) {
 		console.log(`  ${t}: ${formatCapabilities(HOST_CAPABILITIES[t])}`);
+	}
+	for (const f of res.failures) {
+		console.error(`  ${f.target}: FAILED — ${f.error}`);
 	}
 	if (res.installed.length) {
 		console.log(`Wrote/updated: ${res.installed.join(", ")}`);
@@ -183,6 +194,10 @@ program
 	)
 	.option("--overwrite", "Overwrite existing adapter files")
 	.option("--no-with-mcp", "Skip project MCP config merge (default: merge on)")
+	.option(
+		"--pin-launch",
+		"Write this machine's node + CLI + project paths into project MCP config (not portable; do not commit)",
+	)
 	.action(
 		(opts: {
 			target?: string;
@@ -190,6 +205,7 @@ program
 			detect?: boolean;
 			overwrite?: boolean;
 			withMcp?: boolean;
+			pinLaunch?: boolean;
 		}) => {
 			const plan = planFromFlags({
 				target: opts.target,
@@ -197,21 +213,24 @@ program
 				detect: opts.detect,
 			});
 			const withMcp = opts.withMcp !== false;
+			const pinLaunch = Boolean(opts.pinLaunch);
 			const installOpts = {
 				overwrite: opts.overwrite,
 				withMcp,
+				pinLaunch,
 			};
 			warnIfLedgerMissing();
+			const launchNotes = withMcp ? [projectLaunchNote(pinLaunch)] : [];
 
 			if (plan.mode === "targets" && plan.targets.length === 1) {
 				const target = plan.targets[0];
 				if (target === "claude") {
 					const res = installClaude(installOpts);
-					printInstallResult("claude", res);
+					printInstallResult("claude", res, launchNotes);
 					return;
 				}
 				const res = installAgent(target, installOpts);
-				printInstallResult(target, res);
+				printInstallResult(target, res, launchNotes);
 				return;
 			}
 
@@ -232,7 +251,8 @@ program
 					"Skipped chatgpt (use --target chatgpt or codex+desktop). Teams mode is separate: ic teams init.",
 				);
 			}
-			printMultiInstall(plan.mode, plan.targets, multi, extraNotes);
+			printMultiInstall(plan.mode, multi, [...extraNotes, ...launchNotes]);
+			if (multi.failures.length) process.exitCode = 1;
 		},
 	);
 

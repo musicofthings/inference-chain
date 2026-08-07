@@ -3,7 +3,9 @@ import {
 	copyFileSync,
 	existsSync,
 	mkdirSync,
+	readFileSync,
 	readdirSync,
+	writeFileSync,
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
@@ -49,6 +51,27 @@ export function copyTree(
 			}
 		}
 	}
+}
+
+/**
+ * Write a file we own, honoring the same non-clobber contract as copyOne:
+ * existing files are preserved unless overwrite is set.
+ */
+export function writeManagedFile(
+	dest: string,
+	content: string,
+	overwrite: boolean,
+	installed?: string[],
+	cwd: string = process.cwd(),
+): boolean {
+	if (existsSync(dest)) {
+		if (readFileSync(dest, "utf8") === content) return false;
+		if (!overwrite) return false;
+	}
+	mkdirSync(dirname(dest), { recursive: true });
+	writeFileSync(dest, content, "utf8");
+	installed?.push(relative(cwd, dest) || dest);
+	return true;
 }
 
 export function makeExecutable(path: string): void {

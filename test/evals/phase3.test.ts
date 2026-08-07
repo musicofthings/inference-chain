@@ -87,6 +87,7 @@ describe("phase3 eval: host detection", () => {
 		mkdirSync(".cursor", { recursive: true });
 		mkdirSync(".claude", { recursive: true });
 		mkdirSync(".vscode", { recursive: true });
+		writeFileSync(".vscode/mcp.json", "{}\n");
 		writeFileSync("opencode.json", "{}\n");
 
 		const detected = detectHosts(tmp);

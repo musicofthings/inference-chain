@@ -1,5 +1,5 @@
-import { writeFileSync } from "node:fs";
 import { p } from "../../storage/paths.js";
+import { writeManagedFile } from "../shared/fs.js";
 import { mcpDesktopConfigSnippet, mcpSnippetNotes } from "../shared/mcp.js";
 import { writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
@@ -14,12 +14,14 @@ export function installDesktop(opts: InstallOpts): InstallResult {
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
 
-	const snippetPath = p(".inference-chain", "mcp-desktop.json");
-	const snippet = mcpDesktopConfigSnippet();
-	writeFileSync(snippetPath, `${snippet}\n`, "utf8");
-	installed.push(".inference-chain/mcp-desktop.json");
-
 	if (opts.withMcp) {
+		const snippet = mcpDesktopConfigSnippet();
+		writeManagedFile(
+			p(".inference-chain", "mcp-desktop.json"),
+			`${snippet}\n`,
+			opts.overwrite,
+			installed,
+		);
 		notes.push(
 			"Claude Desktop MCP snippet written to .inference-chain/mcp-desktop.json:",
 		);

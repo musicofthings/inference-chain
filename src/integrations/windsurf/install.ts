@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { p } from "../../storage/paths.js";
 import {
 	mcpDesktopConfigSnippet,
@@ -10,23 +8,18 @@ import { mergeJsonKeyAbsent, upsertAgentsMdBlock } from "../shared/merge.js";
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
 
-function writeWindsurfRules(overwrite: boolean, installed: string[]): void {
-	const dest = p(".windsurfrules");
-	if (existsSync(dest) && !overwrite) return;
-	mkdirSync(dirname(dest), { recursive: true });
-	const body = `${readAgentsBody().trimEnd()}\n`;
-	if (existsSync(dest) && readFileSync(dest, "utf8") === body) return;
-	writeFileSync(dest, body, "utf8");
-	installed.push(".windsurfrules");
-}
-
 /** Windsurf Cascade: .windsurfrules + AGENTS.md + optional mcpServers JSON. */
 export function installWindsurf(opts: InstallOpts): InstallResult {
 	const installed: string[] = [];
 	const notes: string[] = [];
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
-	writeWindsurfRules(opts.overwrite, installed);
+
+	// Marker block, not a whole-file write: .windsurfrules is usually
+	// hand-authored and must survive --overwrite.
+	if (upsertAgentsMdBlock(p(".windsurfrules"), readAgentsBody())) {
+		installed.push(".windsurfrules");
+	}
 
 	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
@@ -39,7 +32,7 @@ export function installWindsurf(opts: InstallOpts): InstallResult {
 				mcpPath,
 				{
 					mcpServers: {
-						"inference-chain": mcpJsonServerEntry(),
+						"inference-chain": mcpJsonServerEntry({ pin: opts.pinLaunch }),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: mcpPath },

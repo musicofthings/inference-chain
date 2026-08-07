@@ -20,7 +20,7 @@ export function installContinue(opts: InstallOpts): InstallResult {
 
 	if (opts.withMcp) {
 		const configPath = p(".continue", "config.json");
-		const entry = mcpJsonServerEntry();
+		const entry = mcpJsonServerEntry({ pin: opts.pinLaunch });
 		if (
 			mergeJsonKeyAbsent(
 				configPath,

@@ -23,13 +23,13 @@ export function installGeneric(opts: InstallOpts): InstallResult {
 	}
 
 	if (opts.withMcp) {
-		const entry = mcpJsonServerEntry();
+		const portable = mcpJsonServerEntry();
 		notes.push(
 			"Portable MCP stdio config (merge into your host's MCP settings):",
 		);
 		notes.push(mcpDesktopConfigSnippet());
 		notes.push(
-			`Resolved launch: ${entry.command} ${entry.args.map((a) => JSON.stringify(a)).join(" ")}`,
+			`If the host launches the server with this project as cwd, the paths above can be shortened to: ${portable.command} ${portable.args.join(" ")}`,
 		);
 		notes.push(...mcpSnippetNotes("desktop"));
 	}

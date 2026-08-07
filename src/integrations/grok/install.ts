@@ -85,7 +85,7 @@ export function installGrok(opts: InstallOpts): InstallResult {
 			mergeTomlSectionAbsent(
 				configPath,
 				"mcp_servers.inference-chain",
-				mcpTomlSectionBody(),
+				mcpTomlSectionBody({ pin: opts.pinLaunch }),
 				{ overwrite: opts.overwrite },
 			)
 		) {

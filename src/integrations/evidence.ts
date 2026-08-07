@@ -4,48 +4,78 @@ import { AGENTS_MD_START } from "./shared/merge.js";
 import type { AgentTarget } from "./types.js";
 
 /**
- * Files that indicate Inference Chain wiring was installed for a host
- * (stronger than mere host presence — e.g. `.cursor/` without ic commands).
+ * A file whose presence indicates Inference Chain wiring for a host.
+ * Shared host config (`.mcp.json`, `opencode.json`, …) exists in plenty of
+ * repos that never installed us, so those entries only count when the file
+ * actually references inference-chain.
  */
-export const HOST_INSTALL_EVIDENCE: Partial<Record<AgentTarget, string[]>> = {
-	claude: [".claude/commands/ic-checkpoint.md", ".mcp.json"],
-	cursor: [
-		".cursor/commands/ic-checkpoint.md",
-		".cursor/rules/inference-chain.mdc",
+export type EvidencePath = {
+	path: string;
+	/** "mention" → must contain "inference-chain"; "marker" → our AGENTS.md block. */
+	requires?: "mention" | "marker";
+};
+
+export const HOST_INSTALL_EVIDENCE: Partial<
+	Record<AgentTarget, EvidencePath[]>
+> = {
+	claude: [
+		{ path: ".claude/commands/ic-checkpoint.md" },
+		{ path: ".mcp.json", requires: "mention" },
 	],
-	codex: [".codex/hooks.json", ".codex/config.toml"],
-	gemini: [".gemini/commands/ic-checkpoint.toml"],
-	grok: [".grok/skills/ic-checkpoint/SKILL.md"],
-	openhands: [".openhands/mcp.json"],
-	generic: ["AGENTS.md"],
-	desktop: [".inference-chain/mcp-desktop.json"],
-	copilot: [".github/copilot-instructions.md"],
-	vscode: [".vscode/mcp.json"],
-	opencode: ["opencode.json"],
-	chatgpt: [".inference-chain/mcp-chatgpt-desktop.json"],
-	windsurf: [".windsurfrules", ".windsurf/mcp.json"],
-	continue: [".continue/config.json"],
+	cursor: [
+		{ path: ".cursor/commands/ic-checkpoint.md" },
+		{ path: ".cursor/rules/inference-chain.mdc" },
+	],
+	codex: [
+		{ path: ".codex/hooks.json", requires: "mention" },
+		{ path: ".codex/config.toml", requires: "mention" },
+	],
+	gemini: [{ path: ".gemini/commands/ic-checkpoint.toml" }],
+	grok: [{ path: ".grok/skills/ic-checkpoint/SKILL.md" }],
+	openhands: [{ path: ".openhands/mcp.json", requires: "mention" }],
+	generic: [{ path: "AGENTS.md", requires: "marker" }],
+	desktop: [{ path: ".inference-chain/mcp-desktop.json" }],
+	copilot: [{ path: ".github/copilot-instructions.md", requires: "marker" }],
+	vscode: [{ path: ".vscode/mcp.json", requires: "mention" }],
+	opencode: [{ path: "opencode.json", requires: "mention" }],
+	chatgpt: [{ path: ".inference-chain/mcp-chatgpt-desktop.json" }],
+	windsurf: [
+		{ path: ".windsurfrules", requires: "marker" },
+		{ path: ".windsurf/mcp.json", requires: "mention" },
+	],
+	continue: [{ path: ".continue/config.json", requires: "mention" }],
 };
 
 export type WiringStatus = {
 	target: AgentTarget;
-	/** Evidence paths that exist. */
+	/** Evidence paths that exist and pass their content requirement. */
 	present: string[];
 	/** Evidence paths still missing. */
 	missing: string[];
-	/** True when at least one evidence file exists. */
+	/** True when at least one evidence file counts. */
 	wired: boolean;
-	/** True when MCP config for this host mentions inference-chain (best-effort). */
+	/** True when this host's MCP config references inference-chain (best-effort). */
 	mcpConfigured: boolean | null;
 };
 
-function fileMentionsInferenceChain(absPath: string): boolean {
-	if (!existsSync(absPath)) return false;
+function readIfPresent(absPath: string): string | null {
+	if (!existsSync(absPath)) return null;
 	try {
-		return readFileSync(absPath, "utf8").includes("inference-chain");
+		return readFileSync(absPath, "utf8");
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+function satisfies(
+	absPath: string,
+	requires?: EvidencePath["requires"],
+): boolean {
+	const text = readIfPresent(absPath);
+	if (text === null) return false;
+	if (requires === "mention") return text.includes("inference-chain");
+	if (requires === "marker") return text.includes(AGENTS_MD_START);
+	return true;
 }
 
 /** Best-effort: does this host's MCP config reference inference-chain? */
@@ -71,20 +101,7 @@ export function hostMcpConfigured(
 	};
 	const files = mcpFiles[target];
 	if (!files) return null;
-	for (const f of files) {
-		const abs = resolve(root, f);
-		if (!existsSync(abs)) continue;
-		if (f.endsWith(".toml")) {
-			try {
-				if (readFileSync(abs, "utf8").includes("inference-chain")) return true;
-			} catch {
-				/* ignore */
-			}
-			continue;
-		}
-		if (fileMentionsInferenceChain(abs)) return true;
-	}
-	return false;
+	return files.some((f) => satisfies(resolve(root, f), "mention"));
 }
 
 export function inspectWiring(
@@ -92,28 +109,13 @@ export function inspectWiring(
 	cwd: string = process.cwd(),
 ): WiringStatus {
 	const root = resolve(cwd);
-	const evidence = HOST_INSTALL_EVIDENCE[target] ?? [];
 	const present: string[] = [];
 	const missing: string[] = [];
-	for (const rel of evidence) {
-		if (existsSync(resolve(root, rel))) present.push(rel);
-		else missing.push(rel);
-	}
-
-	// AGENTS.md only counts if our marker block is present.
-	if (target === "generic" || present.includes("AGENTS.md")) {
-		const agents = resolve(root, "AGENTS.md");
-		if (existsSync(agents)) {
-			try {
-				const text = readFileSync(agents, "utf8");
-				if (!text.includes(AGENTS_MD_START)) {
-					const idx = present.indexOf("AGENTS.md");
-					if (idx >= 0) present.splice(idx, 1);
-					if (!missing.includes("AGENTS.md")) missing.push("AGENTS.md");
-				}
-			} catch {
-				/* ignore */
-			}
+	for (const entry of HOST_INSTALL_EVIDENCE[target] ?? []) {
+		if (satisfies(resolve(root, entry.path), entry.requires)) {
+			present.push(entry.path);
+		} else {
+			missing.push(entry.path);
 		}
 	}
 

@@ -16,7 +16,7 @@ export function installOpenHands(opts: InstallOpts): InstallResult {
 
 	if (opts.withMcp) {
 		const mcpPath = p(".openhands", "mcp.json");
-		const entry = mcpJsonServerEntry();
+		const entry = mcpJsonServerEntry({ pin: opts.pinLaunch });
 		if (
 			mergeJsonKeyAbsent(
 				mcpPath,

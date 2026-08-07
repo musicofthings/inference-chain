@@ -48,7 +48,7 @@ export function installCursor(opts: InstallOpts): InstallResult {
 				mcpPath,
 				{
 					mcpServers: {
-						"inference-chain": mcpJsonServerEntry(),
+						"inference-chain": mcpJsonServerEntry({ pin: opts.pinLaunch }),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: mcpPath },

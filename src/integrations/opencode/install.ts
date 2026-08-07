@@ -23,7 +23,9 @@ export function installOpencode(opts: InstallOpts): InstallResult {
 				{
 					$schema: "https://opencode.ai/config.json",
 					mcp: {
-						"inference-chain": mcpOpencodeServerEntry(),
+						"inference-chain": mcpOpencodeServerEntry({
+							pin: opts.pinLaunch,
+						}),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: configPath },

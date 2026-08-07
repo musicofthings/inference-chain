@@ -1,23 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { p } from "../../storage/paths.js";
-import { mcpJsonServerEntry, mcpSnippetNotes } from "../shared/mcp.js";
+import { mcpSnippetNotes, mcpVscodeServerEntry } from "../shared/mcp.js";
 import { mergeJsonKeyAbsent, upsertAgentsMdBlock } from "../shared/merge.js";
 import { readAgentsBody, writeNeutralPrompts } from "../shared/prompts.js";
 import type { AgentAdapter, InstallOpts, InstallResult } from "../types.js";
-
-function writeCopilotInstructions(
-	overwrite: boolean,
-	installed: string[],
-): void {
-	const dest = p(".github", "copilot-instructions.md");
-	if (existsSync(dest) && !overwrite) return;
-	mkdirSync(dirname(dest), { recursive: true });
-	const body = `${readAgentsBody().trimEnd()}\n`;
-	if (existsSync(dest) && readFileSync(dest, "utf8") === body) return;
-	writeFileSync(dest, body, "utf8");
-	installed.push(".github/copilot-instructions.md");
-}
 
 /**
  * GitHub Copilot (IDE + coding agent): repo instructions + AGENTS.md + optional
@@ -28,7 +13,17 @@ export function installCopilot(opts: InstallOpts): InstallResult {
 	const notes: string[] = [];
 
 	writeNeutralPrompts({ overwrite: opts.overwrite, installed });
-	writeCopilotInstructions(opts.overwrite, installed);
+
+	// Marker block, not a whole-file write: copilot-instructions.md is usually
+	// hand-authored and must survive --overwrite.
+	if (
+		upsertAgentsMdBlock(
+			p(".github", "copilot-instructions.md"),
+			readAgentsBody(),
+		)
+	) {
+		installed.push(".github/copilot-instructions.md");
+	}
 
 	if (upsertAgentsMdBlock(p("AGENTS.md"), readAgentsBody())) {
 		installed.push("AGENTS.md");
@@ -41,10 +36,7 @@ export function installCopilot(opts: InstallOpts): InstallResult {
 				mcpPath,
 				{
 					servers: {
-						"inference-chain": {
-							command: mcpJsonServerEntry().command,
-							args: mcpJsonServerEntry().args,
-						},
+						"inference-chain": mcpVscodeServerEntry({ pin: opts.pinLaunch }),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: mcpPath },

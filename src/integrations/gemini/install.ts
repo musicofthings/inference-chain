@@ -20,7 +20,7 @@ export function installGemini(opts: InstallOpts): InstallResult {
 
 	if (opts.withMcp) {
 		const settingsPath = p(".gemini", "settings.json");
-		const entry = mcpJsonServerEntry();
+		const entry = mcpJsonServerEntry({ pin: opts.pinLaunch });
 		if (
 			mergeJsonKeyAbsent(
 				settingsPath,

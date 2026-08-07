@@ -52,33 +52,58 @@ export function installAgent(
 	const normalized: InstallOpts = {
 		overwrite: opts.overwrite ?? false,
 		withMcp: opts.withMcp ?? true,
+		pinLaunch: opts.pinLaunch ?? false,
 	};
 	return getAdapter(target).install(normalized);
 }
 
+export type InstallFailure = {
+	target: AgentTarget;
+	error: string;
+};
+
 export type MultiInstallResult = {
 	targets: AgentTarget[];
+	/** Targets that installed without throwing. */
+	succeeded: AgentTarget[];
 	results: InstallResult[];
+	failures: InstallFailure[];
 	/** Deduplicated relative paths written across all adapters. */
 	installed: string[];
 	/** Deduplicated notes (order preserved). */
 	notes: string[];
 };
 
-/** Install multiple adapters sequentially; merges installed paths and notes. */
+/**
+ * Install multiple adapters sequentially; merges installed paths and notes.
+ * One failing adapter must not discard the work (or the report) of the others,
+ * so failures are collected instead of thrown.
+ */
 export function installAgents(
 	targets: AgentTarget[],
 	opts: Partial<InstallOpts> = {},
 ): MultiInstallResult {
 	const results: InstallResult[] = [];
+	const failures: InstallFailure[] = [];
+	const succeeded: AgentTarget[] = [];
 	const installed: string[] = [];
 	const notes: string[] = [];
 	const seenPaths = new Set<string>();
 	const seenNotes = new Set<string>();
 
 	for (const target of targets) {
-		const res = installAgent(target, opts);
+		let res: InstallResult;
+		try {
+			res = installAgent(target, opts);
+		} catch (err) {
+			failures.push({
+				target,
+				error: err instanceof Error ? err.message : String(err),
+			});
+			continue;
+		}
 		results.push(res);
+		succeeded.push(target);
 		for (const path of res.installed) {
 			if (!seenPaths.has(path)) {
 				seenPaths.add(path);
@@ -93,5 +118,5 @@ export function installAgents(
 		}
 	}
 
-	return { targets, results, installed, notes };
+	return { targets, succeeded, results, failures, installed, notes };
 }

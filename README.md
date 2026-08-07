@@ -83,6 +83,11 @@ ic install --target claude   # or: --all | --detect | --target cursor,vscode
 Other targets install the equivalent host pack (commands, hooks, skills,
 `AGENTS.md`, and project MCP for `ic mcp`). See [docs/agents.md](docs/agents.md).
 
+Project MCP config is written as plain `ic mcp` so it can be committed and used
+by the whole team, which means the CLI has to be on PATH. If you'd rather pin
+this machine's node binary and CLI path, install with `--pin-launch` and keep
+the result out of version control.
+
 Re-init is refused unless you pass `--force` (wipes `.inference-chain/`):
 
 ```bash

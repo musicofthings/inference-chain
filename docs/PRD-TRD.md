@@ -526,6 +526,12 @@ repo (falls back to `generic`). Command bodies are single-sourced from
 `src/integrations/capabilities.ts`. `ic install-claude` is a thin alias for
 `--target claude`. Details: `docs/agents.md`.
 
+Project-scoped MCP config is written as portable `ic mcp` (no node path, CLI
+path, or absolute `--cwd`) because those files are committed and shared;
+`--pin-launch` opts into the machine-local absolute form. Desktop snippets are
+always pinned. A failing adapter in a multi-target plan is reported and exits
+non-zero without aborting the remaining targets.
+
 Claude hooks (also mirrored conceptually on Codex/Grok):
 
 | Hook           | Behavior                                  |

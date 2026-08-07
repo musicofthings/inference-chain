@@ -63,7 +63,7 @@ describe("shared merge helpers", () => {
 	});
 
 	it("mergeTomlSectionAbsent is idempotent", () => {
-		const body = mcpTomlSectionBody(tmp);
+		const body = mcpTomlSectionBody();
 		expect(
 			mergeTomlSectionAbsent("c.toml", "mcp_servers.inference-chain", body),
 		).toBe(true);
@@ -157,7 +157,10 @@ describe("installAgent adapters", () => {
 		expect(existsSync(".cursor/commands/ic-resume.md")).toBe(true);
 		expect(existsSync(".cursor/rules/inference-chain.mdc")).toBe(true);
 		const mcp = JSON.parse(readFileSync(".cursor/mcp.json", "utf8"));
-		expect(mcp.mcpServers["inference-chain"].args).toContain("--cwd");
+		expect(mcp.mcpServers["inference-chain"]).toEqual({
+			command: "ic",
+			args: ["mcp"],
+		});
 	});
 
 	it("installs grok skills, hooks, and config.toml", () => {

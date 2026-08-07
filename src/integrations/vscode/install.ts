@@ -22,7 +22,7 @@ export function installVscode(opts: InstallOpts): InstallResult {
 				mcpPath,
 				{
 					servers: {
-						"inference-chain": mcpVscodeServerEntry(),
+						"inference-chain": mcpVscodeServerEntry({ pin: opts.pinLaunch }),
 					},
 				},
 				{ overwrite: opts.overwrite, warnLabel: mcpPath },

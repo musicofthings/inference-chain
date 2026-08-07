@@ -113,7 +113,6 @@ describe("phase4 eval: doctor", () => {
 		const report = runDoctor();
 		expect(report).toMatchObject({
 			cwd: tmp,
-			ok: true,
 			healthy: true,
 		});
 		expect(Array.isArray(report.checks)).toBe(true);

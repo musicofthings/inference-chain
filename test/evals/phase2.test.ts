@@ -62,7 +62,7 @@ describe("phase2 eval: thin host adapters", () => {
 		);
 		expect(existsSync("AGENTS.md")).toBe(true);
 		const mcp = JSON.parse(readFileSync(".vscode/mcp.json", "utf8"));
-		expect(mcp.servers["inference-chain"].args).toContain("--cwd");
+		expect(mcp.servers["inference-chain"].command).toBe("ic");
 	});
 
 	it("installs vscode mcp + AGENTS.md", () => {
@@ -76,9 +76,7 @@ describe("phase2 eval: thin host adapters", () => {
 		installAgent("opencode", { withMcp: true });
 		const cfg = JSON.parse(readFileSync("opencode.json", "utf8"));
 		expect(cfg.mcp["inference-chain"].type).toBe("local");
-		expect(cfg.mcp["inference-chain"].command).toEqual(
-			expect.arrayContaining(["mcp", "--cwd", resolve(tmp)]),
-		);
+		expect(cfg.mcp["inference-chain"].command).toEqual(["ic", "mcp"]);
 		expect(readFileSync("AGENTS.md", "utf8")).toContain(AGENTS_MD_START);
 	});
 
@@ -99,7 +97,7 @@ describe("phase2 eval: thin host adapters", () => {
 	it("installs continue config + AGENTS.md", () => {
 		installAgent("continue", { withMcp: true });
 		const cfg = JSON.parse(readFileSync(".continue/config.json", "utf8"));
-		expect(cfg.mcpServers["inference-chain"].args).toContain("--cwd");
+		expect(cfg.mcpServers["inference-chain"].args).toEqual(["mcp"]);
 		expect(existsSync("AGENTS.md")).toBe(true);
 	});
 

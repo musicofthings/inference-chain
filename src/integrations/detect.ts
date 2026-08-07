@@ -14,7 +14,9 @@ export const HOST_DETECT_MARKERS: Partial<Record<AgentTarget, string[]>> = {
 	grok: [".grok"],
 	openhands: [".openhands"],
 	copilot: [".github/copilot-instructions.md"],
-	vscode: [".vscode"],
+	// Not bare `.vscode`: almost every repo has one for editor settings, which
+	// would make --detect and doctor noisy everywhere.
+	vscode: [".vscode/mcp.json"],
 	opencode: ["opencode.json", ".opencode"],
 	windsurf: [".windsurf", ".windsurfrules"],
 	continue: [".continue"],
@@ -47,7 +49,7 @@ export type DetectedHost = {
 	matched: string[];
 };
 
-/** Scan cwd for host config markers. Order follows ALL_INSTALL_TARGETS then others. */
+/** Scan cwd for host config markers, in HOST_DETECT_MARKERS order. */
 export function detectHosts(cwd: string = process.cwd()): DetectedHost[] {
 	const root = resolve(cwd);
 	const found: DetectedHost[] = [];

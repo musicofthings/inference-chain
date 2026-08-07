@@ -20,6 +20,12 @@ export type AgentTarget = (typeof AGENT_TARGETS)[number];
 export type InstallOpts = {
 	overwrite: boolean;
 	withMcp: boolean;
+	/**
+	 * Write this machine's node + CLI + project paths into project-scoped MCP
+	 * config instead of the portable `ic mcp` launch. Off by default because
+	 * those files are committed and shared.
+	 */
+	pinLaunch?: boolean;
 };
 
 export type InstallResult = {

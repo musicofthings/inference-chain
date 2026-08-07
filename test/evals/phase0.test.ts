@@ -153,7 +153,7 @@ describe("phase0 eval: Claude install parity", () => {
 		installClaude({ overwrite: false, withMcp: true });
 		expect(existsSync(".mcp.json")).toBe(true);
 		const mcp = JSON.parse(readFileSync(".mcp.json", "utf8"));
-		expect(mcp.mcpServers["inference-chain"].args).toContain("--cwd");
+		expect(mcp.mcpServers["inference-chain"].command).toBe("ic");
 
 		const settingsPath = ".claude/settings.json";
 		const settings = JSON.parse(readFileSync(settingsPath, "utf8"));

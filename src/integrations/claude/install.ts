@@ -48,7 +48,7 @@ function desiredClaudeHooks(): Record<string, unknown> {
 }
 
 export function installClaude(
-	opts: { overwrite?: boolean; withMcp?: boolean } = {},
+	opts: { overwrite?: boolean; withMcp?: boolean; pinLaunch?: boolean } = {},
 ): InstallResult & {
 	installedCommands: string[];
 	settingsPath: string;
@@ -83,9 +83,10 @@ export function installClaude(
 		const dest = p(".claude", "plugins", "inference-chain");
 		copyTree(pluginSrc, dest, overwrite, installed, process.cwd());
 		pluginInstalled = true;
-		// Replace stub plugin commands with full bodies from common/commands.
+		// Regenerate plugin commands from common/commands so the scaffold cannot
+		// drift from the single source.
 		installClaudeStyleCommands(join(dest, "commands"), {
-			overwrite: true,
+			overwrite,
 			installed,
 		});
 	}
@@ -97,7 +98,7 @@ export function installClaude(
 				mcpPath,
 				{
 					mcpServers: {
-						"inference-chain": mcpJsonServerEntry(),
+						"inference-chain": mcpJsonServerEntry({ pin: opts.pinLaunch }),
 					},
 				},
 				{ overwrite, warnLabel: mcpPath },
