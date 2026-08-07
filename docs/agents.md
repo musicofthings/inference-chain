@@ -254,3 +254,15 @@ contains no machine-specific paths, `--overwrite` never eats hand-authored
 instruction files, and a failing adapter does not sink a multi-target install.
 
 Run: `pnpm test`.
+
+### End-to-end eval
+
+`pnpm eval:e2e` (`scripts/e2e-eval.sh`) drives the built `dist/cli.js` through
+`init → install → doctor → ingest/evolve/resume/verify` in throwaway project
+directories — the surface unit tests cannot reach: real exit codes, `ic doctor`
+output, the stdio MCP handshake, and the install contracts above. Pass `--keep`
+to retain the temp projects.
+
+Every CLI invocation is preceded by an `assert_sandboxed` check that aborts if
+the working directory is inside this repo, so a failed `cd` can never run
+`ic install --all` against the source tree.
