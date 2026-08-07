@@ -242,6 +242,18 @@ Ablations (same scenario):
 | `IC_STABLE_THRESHOLD=3` | n+1 POSITIVE | promotion delayed to second explicit confirm |
 | `IC_RESUME_TOP_K=3` | n+1 POSITIVE | smaller brief, same gates |
 
+Second scenario, `examples/demo-project/paraphrase-drift/` — one belief
+restated across sessions, plus two rival cache designs that share most of
+their wording:
+
+| Config | Promotion rate | Leftover active hypotheses |
+| --- | --- | --- |
+| Default `IC_MATCH_THRESHOLD=0.82` | 0.2 | none |
+| `IC_MATCH_THRESHOLD=1` (exact only) | 0 | the restatement dangles forever |
+
+Both stay n+1 POSITIVE; the difference is whether the reworded belief
+accumulates evidence or forks. The rival designs stay separate under both.
+
 Team merge synthetic eval (2 developers, one assert/deny conflict): conflict
 quarantined into an open question; `--strict` exits non-zero; divergent
 `project_id` values are rejected. Exclusive-belief e2e: promote then reject
@@ -259,6 +271,12 @@ brief coherent:
   clears a prior rejection.
 - **Promote.** Confirmations accumulate; at `IC_STABLE_THRESHOLD` the
   hypothesis graduates to `stable_learnings`.
+- **Match restatements, not synonyms.** A belief reworded between sessions
+  counts as the same belief (Dice similarity over content tokens, default
+  `0.82`), so evidence accumulates instead of forking into a duplicate
+  hypothesis that never promotes. The bar is high on purpose: rival designs
+  share more wording than paraphrases do, and merging those would let a
+  rejection take an unrelated belief down with it.
 - **Prune resolved blockers.** Rejecting a belief drops any matching
   frontier blocker so solved problems stop resurfacing.
 - **Converge the frontier.** Non-empty `next_action_delta` / session
@@ -269,6 +287,10 @@ brief coherent:
   promote an active hypothesis to `stable_learnings`.
 - `IC_RESUME_TOP_K` (default `12`) — cap on items per section in the
   resume brief (full ledger always lives in `current.yml`).
+- `IC_MATCH_THRESHOLD` (default `0.82`) — similarity at which a reworded
+  belief is treated as the same belief. `1` restores exact-only matching.
+  Word order, filler words, plurals, and added qualifiers match; tense
+  changes ("fixes" vs "fixed") and true synonyms do not.
 
 ## What gets stored
 ```text

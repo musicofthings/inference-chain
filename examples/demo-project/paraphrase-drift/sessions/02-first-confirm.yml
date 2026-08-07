@@ -1,0 +1,16 @@
+kind: interaction_update
+schema_version: "1.0.0"
+id: upd_02_first_confirm
+project_id: pooling-drift
+iteration: 0
+created_at: "2026-06-01T11:00:00Z"
+trigger: successful_attempt
+what_changed: "Pooling hypothesis survived its first load test"
+confirmed:
+  - belief: "connection pooling fixes the concurrency stalls"
+    evidence: "200 rps load test stopped timing out with a pool of 16"
+next_action_delta:
+  - "re-run the load test at 400 rps"
+do_not_repeat_delta:
+  - "opening a database socket per request under concurrent load"
+human_note: "First evidence for pooling"

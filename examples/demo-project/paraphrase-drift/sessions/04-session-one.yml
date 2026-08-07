@@ -1,0 +1,33 @@
+kind: session_brief
+schema_version: "1.0.0"
+id: brf_04_session_one
+project_id: pooling-drift
+iteration: 0
+created_at: "2026-06-02T17:00:00Z"
+session_intent:
+  primary_goal: "Fix the checkout concurrency stall"
+  what_agent_was_doing: "Sizing and landing the connection pool"
+working_theory:
+  summary: "The stall was connection churn; a bounded pool removes it"
+  confidence: high
+actions_attempted:
+  - "added a bounded connection pool to the database client"
+  - "ran load tests at 200 and 400 rps"
+outcomes_observed:
+  - "checkout p99 latency held under 300ms at 400 rps"
+worked:
+  - "connection pooling fixes the concurrency stalls"
+did_not_work: []
+partially_worked: []
+issues_identified:
+  - "pool size was tuned only against the load test profile"
+fixes_attempted:
+  - "bound the connection pool to 32"
+unresolved_state: "Session store still hits the database on every read"
+next_best_action:
+  - "cache the session store reads"
+  - "confirm pool size against production traffic"
+do_not_repeat:
+  - "tuning pool size against load-test traffic alone"
+user_constraints: []
+human_handoff_summary: "Connection pooling landed and holds at 400 rps. Session store reads are the next hotspot."

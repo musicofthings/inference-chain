@@ -1,0 +1,16 @@
+kind: interaction_update
+schema_version: "1.0.0"
+id: upd_06_rival_b
+project_id: pooling-drift
+iteration: 1
+created_at: "2026-06-03T14:00:00Z"
+trigger: new_hypothesis
+what_changed: "Prototyped write-behind caching with a flush queue"
+confirmed:
+  - belief: "write-behind caching with a flush queue for the session store"
+    evidence: "write amplification dropped but flush lag reached 800ms"
+next_action_delta:
+  - "decide between the two caching designs"
+new_risks:
+  - "write-behind loses acknowledged writes if the flush queue drains late"
+human_note: "Second caching option"

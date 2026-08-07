@@ -747,9 +747,30 @@ specific items dilutes. v1.1 enforces:
   hypotheses. This was bloating active_hypotheses on every interaction.
 - **`STABLE_PROMOTION_THRESHOLD` is configurable** via `IC_STABLE_THRESHOLD`
   env var (default 2).
-- **Future (v1.2):** fuzzy hypothesis matching via token-set similarity so
-  paraphrased beliefs still accumulate evidence. Currently exact-after-
-  normalization match — a known limitation worth measuring with `ic simulate`.
+- **Fuzzy hypothesis matching (v1.2, shipped).** Belief lookup is
+  exact-after-normalization first, then Sørensen–Dice similarity over content
+  tokens (stopwords dropped, plurals collapsed) at `IC_MATCH_THRESHOLD`,
+  default `0.82`. Set to `1` for the pre-v1.2 exact-only behaviour. See
+  `src/core/similarity.ts`.
+
+  The threshold is high because the risk is asymmetric. Competing designs
+  share more surface tokens than genuine paraphrases do — "write-through
+  caching for the session store" and "write-behind caching … for the session
+  store" overlap heavily while being mutually exclusive — so any threshold
+  loose enough to capture synonymy also merges rival beliefs, and a rejection
+  would then silently remove the belief that actually won. Matching also
+  refuses to cross a polarity flip (a negation present on one side only).
+
+  This catches restatement, not synonymy: word order, filler, plurals, and
+  added qualifiers match; tense changes and true synonyms do not. Real
+  semantic matching needs a model call, which the solo core excludes by
+  design (§7).
+
+  Measured with `ic simulate` on
+  `examples/demo-project/paraphrase-drift/`: exact-only leaves the restated
+  belief as a permanently unpromoted duplicate (promotion rate 0); at the
+  default threshold it merges and promotes (0.2), while the two rival cache
+  designs stay separate under both.
 
 ### 22. Simulation harness (`ic simulate`)
 

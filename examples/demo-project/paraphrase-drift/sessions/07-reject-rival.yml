@@ -1,0 +1,16 @@
+kind: interaction_update
+schema_version: "1.0.0"
+id: upd_07_reject_rival
+project_id: pooling-drift
+iteration: 1
+created_at: "2026-06-04T09:00:00Z"
+trigger: failed_attempt
+what_changed: "Dropped the write-behind design after a durability review"
+rejected:
+  - belief: "write-behind caching with a flush queue for the session store"
+    reason: "acknowledged writes were lost when the flush queue drained late"
+next_action_delta:
+  - "ship write-through caching"
+do_not_repeat_delta:
+  - "acknowledging a write before the session cache has flushed it"
+human_note: "Durability decided it"

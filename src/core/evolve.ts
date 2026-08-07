@@ -6,6 +6,11 @@ import type {
 	MemoryEvolutionRecord,
 	SessionBrief,
 } from "./schemas.js";
+import {
+	DEFAULT_MATCH_THRESHOLD,
+	matchIndex,
+	matchIndexBy,
+} from "./similarity.js";
 
 export type Source =
 	| { kind: "interaction"; value: InteractionUpdate }
@@ -24,27 +29,25 @@ const DEFAULT_STABLE_PROMOTION_THRESHOLD = (() => {
 export type EvolveOptions = {
 	/** Number of supporting-evidence items before a hypothesis is promoted to stable. */
 	stablePromotionThreshold?: number;
+	/** Similarity at which a restated belief counts as the same belief. 1 = exact only. */
+	matchThreshold?: number;
 };
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-function uniqueAppend(target: string[], incoming: string[]): string[] {
-	const seen = new Set(target.map(norm));
+function uniqueAppend(
+	target: string[],
+	incoming: string[],
+	threshold: number,
+): string[] {
 	const out = [...target];
 	for (const item of incoming) {
 		const trimmed = item.trim();
 		if (!trimmed) continue;
-		const key = norm(trimmed);
-		if (seen.has(key)) continue;
-		seen.add(key);
+		if (matchIndex(out, trimmed, threshold) >= 0) continue;
 		out.push(trimmed);
 	}
 	return out;
-}
-
-function findHypothesisIndex(list: ActiveHypothesis[], belief: string): number {
-	const k = norm(belief);
-	return list.findIndex((h) => norm(h.hypothesis) === k);
 }
 
 function bumpConfidence(
@@ -86,6 +89,11 @@ export function evolveLedger(
 ): EvolutionResult {
 	const stablePromotionThreshold =
 		opts.stablePromotionThreshold ?? DEFAULT_STABLE_PROMOTION_THRESHOLD;
+	const matchThreshold = opts.matchThreshold ?? DEFAULT_MATCH_THRESHOLD;
+	const findHypothesisIndex = (list: ActiveHypothesis[], belief: string) =>
+		matchIndexBy(list, belief, (h) => h.hypothesis, matchThreshold);
+	const append = (target: string[], incoming: string[]) =>
+		uniqueAppend(target, incoming, matchThreshold);
 	const next: ChainLedger = structuredClone(previous);
 	const fromIteration = previous.iteration;
 	next.updated_at = new Date().toISOString();
@@ -108,20 +116,28 @@ export function evolveLedger(
 		const idx = findHypothesisIndex(next.active_hypotheses, belief);
 		if (idx >= 0) next.active_hypotheses.splice(idx, 1);
 	};
+	// Drop *every* match, not just the best one: a ledger written before fuzzy
+	// matching existed can hold several restatements of one belief, and leaving
+	// the runners-up behind would keep a belief in two exclusive sections.
+	const dropAllBy = <T>(
+		list: T[],
+		belief: string,
+		key: (item: T) => string,
+	) => {
+		for (;;) {
+			const idx = matchIndexBy(list, belief, key, matchThreshold);
+			if (idx < 0) return;
+			list.splice(idx, 1);
+		}
+	};
 	const dropFromStable = (belief: string) => {
-		next.stable_learnings = next.stable_learnings.filter(
-			(l) => norm(l) !== norm(belief),
-		);
+		dropAllBy(next.stable_learnings, belief, (l) => l);
 	};
 	const dropFromRejected = (belief: string) => {
-		next.rejected_hypotheses = next.rejected_hypotheses.filter(
-			(r) => norm(r.hypothesis) !== norm(belief),
-		);
+		dropAllBy(next.rejected_hypotheses, belief, (r) => r.hypothesis);
 	};
 	const dropMatchingBlocker = (belief: string) => {
-		next.current_frontier.blockers = next.current_frontier.blockers.filter(
-			(b) => norm(b) !== norm(belief),
-		);
+		dropAllBy(next.current_frontier.blockers, belief, (b) => b);
 	};
 
 	const tryPromote = (h: ActiveHypothesis, idx: number) => {
@@ -131,7 +147,7 @@ export function evolveLedger(
 			reason: `Confirmed ${h.supporting_evidence.length}× across iterations`,
 		});
 		dropFromRejected(h.hypothesis);
-		next.stable_learnings = uniqueAppend(next.stable_learnings, [h.hypothesis]);
+		next.stable_learnings = append(next.stable_learnings, [h.hypothesis]);
 		next.active_hypotheses.splice(idx, 1);
 	};
 
@@ -139,14 +155,14 @@ export function evolveLedger(
 		// Re-asserting clears any prior rejection so the belief is exclusive.
 		dropFromRejected(belief);
 
-		if (next.stable_learnings.some((l) => norm(l) === norm(belief))) {
+		if (matchIndex(next.stable_learnings, belief, matchThreshold) >= 0) {
 			confirmedRecords.push({ belief, evidence });
 			return;
 		}
 		const idx = findHypothesisIndex(next.active_hypotheses, belief);
 		if (idx >= 0) {
 			const h = next.active_hypotheses[idx];
-			h.supporting_evidence = uniqueAppend(h.supporting_evidence, [evidence]);
+			h.supporting_evidence = append(h.supporting_evidence, [evidence]);
 			h.confidence = bumpConfidence(h.confidence);
 			tryPromote(h, idx);
 		} else {
@@ -169,9 +185,7 @@ export function evolveLedger(
 		const idx = findHypothesisIndex(next.active_hypotheses, belief);
 		if (idx >= 0) {
 			const h = next.active_hypotheses[idx];
-			h.contradicting_evidence = uniqueAppend(h.contradicting_evidence, [
-				reason,
-			]);
+			h.contradicting_evidence = append(h.contradicting_evidence, [reason]);
 			h.confidence = dropConfidence(h.confidence);
 		}
 		weakenedRecords.push({ belief, reason });
@@ -182,9 +196,13 @@ export function evolveLedger(
 		dropFromStable(belief);
 		// A rejected belief is a resolved problem, not an open blocker.
 		dropMatchingBlocker(belief);
-		const already = next.rejected_hypotheses.some(
-			(r) => norm(r.hypothesis) === norm(belief),
-		);
+		const already =
+			matchIndexBy(
+				next.rejected_hypotheses,
+				belief,
+				(r) => r.hypothesis,
+				matchThreshold,
+			) >= 0;
 		if (!already) {
 			next.rejected_hypotheses.push({
 				hypothesis: belief,
@@ -216,7 +234,7 @@ export function evolveLedger(
 			tryPromote(h, next.active_hypotheses.length - 1);
 		} else {
 			const h = next.active_hypotheses[idx];
-			h.supporting_evidence = uniqueAppend(h.supporting_evidence, [reason]);
+			h.supporting_evidence = append(h.supporting_evidence, [reason]);
 			tryPromote(h, idx);
 		}
 		supersededRecords.push({
@@ -227,13 +245,11 @@ export function evolveLedger(
 	};
 
 	const applyDoNotRepeat = (items: string[]) => {
-		const seen = new Set(next.do_not_repeat.map(norm));
 		for (const item of items) {
 			const trimmed = item.trim();
 			if (!trimmed) continue;
-			const key = norm(trimmed);
-			if (seen.has(key)) continue;
-			seen.add(key);
+			if (matchIndex(next.do_not_repeat, trimmed, matchThreshold) >= 0)
+				continue;
 			next.do_not_repeat.push(trimmed);
 			antiRepeatAdded.push(trimmed);
 		}
@@ -242,7 +258,7 @@ export function evolveLedger(
 	const assertStable = (learning: string) => {
 		dropFromActive(learning);
 		dropFromRejected(learning);
-		next.stable_learnings = uniqueAppend(next.stable_learnings, [learning]);
+		next.stable_learnings = append(next.stable_learnings, [learning]);
 	};
 
 	if (source.kind === "session") {
@@ -284,16 +300,20 @@ export function evolveLedger(
 		}
 
 		// issues_identified → blockers + recurring_failure_patterns
-		next.current_frontier.blockers = uniqueAppend(
-			next.current_frontier.blockers,
-			[...brief.issues_identified, ...brief.new_blockers],
-		);
+		next.current_frontier.blockers = append(next.current_frontier.blockers, [
+			...brief.issues_identified,
+			...brief.new_blockers,
+		]);
 		for (const issue of brief.issues_identified) {
-			const existing = next.recurring_failure_patterns.find(
-				(p) => norm(p.pattern) === norm(issue),
+			const existingIdx = matchIndexBy(
+				next.recurring_failure_patterns,
+				issue,
+				(p) => p.pattern,
+				matchThreshold,
 			);
+			const existing = next.recurring_failure_patterns[existingIdx];
 			if (existing) {
-				existing.evidence = uniqueAppend(existing.evidence, [
+				existing.evidence = append(existing.evidence, [
 					`Iteration ${next.iteration}`,
 				]);
 			} else {
@@ -304,16 +324,22 @@ export function evolveLedger(
 			}
 		}
 
-		next.current_frontier.risks = uniqueAppend(
+		next.current_frontier.risks = append(
 			next.current_frontier.risks,
 			brief.new_risks,
 		);
 
 		// fixes_attempted → stable_decisions (each fix is a decision worth tracking)
 		for (const fix of brief.fixes_attempted) {
-			const existing = next.stable_decisions.find(
-				(d) => norm(d.decision) === norm(fix),
-			);
+			const existing =
+				next.stable_decisions[
+					matchIndexBy(
+						next.stable_decisions,
+						fix,
+						(d) => d.decision,
+						matchThreshold,
+					)
+				];
 			if (existing) {
 				existing.last_confirmed_at_iteration = next.iteration;
 			} else {
@@ -331,7 +357,7 @@ export function evolveLedger(
 		applyDoNotRepeat([...brief.do_not_repeat, ...brief.user_constraints]);
 
 		if (brief.unresolved_state.trim()) {
-			next.open_questions = uniqueAppend(next.open_questions, [
+			next.open_questions = append(next.open_questions, [
 				brief.unresolved_state,
 			]);
 		}
@@ -347,11 +373,11 @@ export function evolveLedger(
 
 		applyDoNotRepeat(upd.do_not_repeat_delta);
 
-		next.current_frontier.blockers = uniqueAppend(
+		next.current_frontier.blockers = append(
 			next.current_frontier.blockers,
 			upd.new_blockers,
 		);
-		next.current_frontier.risks = uniqueAppend(
+		next.current_frontier.risks = append(
 			next.current_frontier.risks,
 			upd.new_risks,
 		);

@@ -1,0 +1,17 @@
+# The same belief as 02, restated in a later session with different wording —
+# the exact case that exact-string matching split into two hypotheses, so
+# neither ever reached the promotion threshold.
+kind: interaction_update
+schema_version: "1.0.0"
+id: upd_03_restate_confirm
+project_id: pooling-drift
+iteration: 0
+created_at: "2026-06-02T09:30:00Z"
+trigger: successful_attempt
+what_changed: "Second load test confirms the pooling result"
+confirmed:
+  - belief: "pooling database connections fixes the concurrency stalls"
+    evidence: "p99 latency stayed flat at 400 rps with a pool of 32"
+next_action_delta:
+  - "pick a pool size for production"
+human_note: "Same belief as yesterday, worded differently"
