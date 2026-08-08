@@ -1,6 +1,6 @@
 {
 	"name": "inference-chain",
-	"version": "0.3.3",
+	"version": "0.3.4",
 	"description": "Inference Chain — A Forward Inference Ledger for Claude Code",
 	"type": "module",
 	"license": "Apache-2.0",
