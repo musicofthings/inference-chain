@@ -3,7 +3,10 @@ name: Release
 # Publishes to npm when a v* tag is pushed:
 #   pnpm version <patch|minor|major> && git push --follow-tags
 #
-# Requires an NPM_TOKEN secret (automation token) on the repository.
+# Authenticates with npm trusted publishing (OIDC) — there is no NPM_TOKEN
+# secret to leak or rotate. The trusted publisher registered on npmjs.com is
+# pinned to this repository *and this filename*, so renaming this file silently
+# breaks releases until the publisher config is updated to match.
 on:
   push:
     tags: ["v*"]
@@ -13,7 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # npm provenance attestation
+      # Mints the OIDC token npm exchanges for a short-lived publish credential.
+      # Also what lets npm attach a provenance attestation.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -21,15 +26,27 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: pnpm
+          # Trusted publishing requires >= 22.14, and 22 is a version CI already
+          # exercises — so better-sqlite3 is known to build here.
+          node-version: 22
           registry-url: https://registry.npmjs.org
+          # Deliberately no dependency cache: a release build should resolve
+          # everything from the registry rather than trust a restored cache.
+
+      # Node 22 bundles npm 10.x; OIDC publishing landed in npm 11.5.1. Printed
+      # because an outdated npm fails as a confusing ENEEDAUTH at the last step.
+      - name: npm new enough for OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm test
       - run: pnpm eval:e2e
+      - name: n+1 sharpness regression
+        run: pnpm eval:sim
 
       - name: tag matches package.json version
         run: |
@@ -40,6 +57,6 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No --provenance and no NODE_AUTH_TOKEN: under trusted publishing npm
+      # detects the OIDC environment itself and signs provenance by default.
+      - run: npm publish
