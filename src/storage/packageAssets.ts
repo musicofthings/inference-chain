@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +18,24 @@ export function templatesRoot(): string {
 	throw new Error(
 		`templates/ directory not found relative to ${here}. Looked in: ${candidates.join(", ")}`,
 	);
+}
+
+/**
+ * Version from the installed package.json. Resolved the same way as templates
+ * so it works from src (tsx) and from dist alike.
+ */
+export function packageVersion(): string {
+	const here = dirname(fileURLToPath(import.meta.url));
+	for (const c of [
+		resolve(here, "..", "..", "package.json"),
+		resolve(here, "..", "..", "..", "package.json"),
+	]) {
+		if (existsSync(c)) {
+			const pkg = JSON.parse(readFileSync(c, "utf8")) as { version?: string };
+			if (pkg.version) return pkg.version;
+		}
+	}
+	return "unknown";
 }
 
 export const TEMPLATE = {

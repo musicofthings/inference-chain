@@ -31,7 +31,7 @@ import { planFromFlags } from "./integrations/targets.js";
 import { installTeams } from "./integrations/teams/install.js";
 import type { AgentTarget } from "./integrations/types.js";
 import { writeFileAtomic } from "./storage/atomicWrite.js";
-import { TEMPLATE } from "./storage/packageAssets.js";
+import { TEMPLATE, packageVersion } from "./storage/packageAssets.js";
 import { PATHS, ic, p } from "./storage/paths.js";
 import {
 	appendChainEvent,
@@ -87,7 +87,8 @@ function copyPromptTemplates(): void {
 const program = new Command();
 program
 	.name("ic")
-	.description("Inference Chain — forward-only n+1 inference ledger.");
+	.description("Inference Chain — forward-only n+1 inference ledger.")
+	.version(packageVersion(), "-v, --version");
 
 program
 	.command("init")
