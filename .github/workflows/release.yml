@@ -29,9 +29,15 @@ jobs:
           # Trusted publishing requires >= 22.14, and 22 is a version CI already
           # exercises — so better-sqlite3 is known to build here.
           node-version: 22
-          registry-url: https://registry.npmjs.org
-          # Deliberately no dependency cache: a release build should resolve
-          # everything from the registry rather than trust a restored cache.
+          # No registry-url on purpose. It makes setup-node write an .npmrc with
+          # _authToken=${NODE_AUTH_TOKEN} and export a literal
+          # "XXXXX-XXXXX-XXXXX-XXXXX" placeholder when no token is supplied.
+          # npm then prefers that bogus credential over OIDC, publishes as
+          # nobody, and the registry answers 404. registry.npmjs.org is the
+          # default anyway, so this costs nothing.
+          #
+          # Also deliberately no dependency cache: a release build should
+          # resolve from the registry rather than trust a restored cache.
 
       # Node 22 bundles npm 10.x; OIDC publishing landed in npm 11.5.1. Printed
       # because an outdated npm fails as a confusing ENEEDAUTH at the last step.
@@ -54,6 +60,16 @@ jobs:
           pkg=$(node -p "require('./package.json').version")
           if [ "$tag" != "$pkg" ]; then
             echo "tag $tag does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      # npm prefers a configured credential over OIDC, so anything that leaves
+      # one behind turns into an opaque "404 Not Found - PUT" at publish time.
+      # Fail loudly here instead. Never echo the value.
+      - name: nothing shadowing OIDC auth
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NODE_AUTH_TOKEN is set; npm would use it instead of OIDC" >&2
             exit 1
           fi
 
