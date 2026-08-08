@@ -68,3 +68,30 @@ jobs:
             if (missing.length) { console.error('missing from tarball:', missing); process.exit(1); }
             console.log('tarball ok:', files.length, 'files');
           "
+
+      # npm rewrites package.json on publish. A dropped or malformed bin means
+      # `npm i -g inference-chain` installs no `ic`, which every generated MCP
+      # config and Stop hook assumes is on PATH.
+      - name: package.json survives npm normalization
+        run: |
+          npm pkg fix
+          git diff --exit-code package.json || {
+            echo "npm pkg fix rewrote package.json — commit the normalized form" >&2
+            exit 1
+          }
+
+      # The real contract: a global install produces a working `ic`.
+      - name: global install smoke test
+        run: |
+          tgz=$(npm pack --silent | tail -1)
+          npm i -g --prefix "$RUNNER_TEMP/npm-global" "./$tgz"
+          "$RUNNER_TEMP/npm-global/bin/ic" --version
+          cd "$RUNNER_TEMP"
+          mkdir -p ic-smoke && cd ic-smoke
+          export PATH="$RUNNER_TEMP/npm-global/bin:$PATH"
+          ic init --project-name "SmokeTest"
+          ic install --target claude
+          # Templates must resolve from inside the installed package, not the checkout.
+          test -f .inference-chain/prompts/capture-session-brief.md
+          grep -q '"command": "ic"' .mcp.json
+          ic sync
